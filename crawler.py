@@ -6,6 +6,9 @@ from bs4 import BeautifulSoup
 import re
 from datetime import datetime, timezone
 from dateutil import parser as time_parser
+import hashlib
+import pathlib
+import os
 
 
 class Crawler:
@@ -71,8 +74,23 @@ class Crawler:
                     if not url in self.visited_urls and not url in self.urls:
                         self.urls.append(url)
 
+    def __save_page(self):
+        print("caca")
+        # Create page's file's information
+        page_filename = f"{hashlib.blake2b(self.url.encode("utf-8"), digest_size=16).hexdigest()}.html"  # Filename : hashed page's url
+        page_filepath = pathlib.PurePath(pathlib.Path("Pages"), page_filename[:2], page_filename)
+
+        # Create Directory if it doesn't exist
+        if not os.path.exists(os.path.dirname(page_filepath)):
+            os.makedirs(os.path.dirname(page_filepath))
+
+        # Write file
+        with open(page_filepath, "w", encoding="utf-8") as page_file:
+            page_file.write(self.page.prettify())
+
     def run(self):
-        while self.urls:
+        # while self.urls:
+        for _ in range(10):
             # Get URL
             self.url = self.urls.pop(0)  # Get URl and delete it
 
@@ -95,6 +113,9 @@ class Crawler:
                     # Get page's links
                     if self.robots_txt.authorizations["follow"]:
                         self.__get_links()
+
+                    # Save page's content
+                    self.__save_page()
 
             print("----------------------------")
             time.sleep(1)  # Wait not to DDOS host
