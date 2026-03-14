@@ -1,16 +1,35 @@
-# This is a sample Python script.
-
-# Press Maj+F10 to execute it or replace it with your code.
-# Press Double Shift to search everywhere for classes, files, tool windows, actions, and settings.
+from urllib.parse import urlparse
 
 
-def print_hi(name):
-    # Use a breakpoint in the code line below to debug your script.
-    print(f'Hi, {name}')  # Press Ctrl+F8 to toggle the breakpoint.
+url = "http://caca.org/prout/test/caca"
+url_path = urlparse(url).path.split("/")
+url_path.pop(0) if not url_path[0] else url_path
+print(url_path)
 
+link = "../../test/../caca"
+link = link.split("/")
+print(link)
 
-# Press the green button in the gutter to run the script.
-if __name__ == '__main__':
-    print_hi('PyCharm')
+i = 0
+n = len(link)
+s = True
+while i < n:
+    if link[i] == "..":
+        if s:
+            link.pop(0)
+            url_path.pop(i)
 
-# See PyCharm help at https://www.jetbrains.com/help/pycharm/
+        else:
+            link.pop(i-1)
+
+    else:
+        s = False
+
+    print("------------------")
+    print(url_path)
+    print(link)
+
+    i += 1
+
+url = "/".join(url_path) + "/".join(link)
+print(url)
