@@ -9,6 +9,7 @@ from dateutil import parser as time_parser
 import hashlib
 import pathlib
 import os
+import sqlite3
 
 
 class Crawler:
@@ -20,14 +21,48 @@ class Crawler:
         }
 
         # URLs
-        self.urls = ["https://fr.wikipedia.org/wiki/Wikip%C3%A9dia:Accueil_principal"]
-        self.url = self.urls[0]
+        self.queue = ["https://fr.wikipedia.org/wiki/Wikip%C3%A9dia:Accueil_principal"]
+        self.url = self.queue[0]
         self.response = requests.Response()
         self.page = BeautifulSoup()
+        self.page_filepath = pathlib.PurePath()
         self.visited_urls = []
 
         # Robots.txt
         self.robots_txt = RobotsTxt(crawler=self)
+
+    def init(self):
+        # Create database
+        db = sqlite3.connect("crawl.db")
+        db.execute("""
+        CREATE TABLE IF NOT EXISTS queue (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            url TEXT
+        )
+        """)
+        db.commit()
+        db.close()
+
+    def __load_queue(self):
+        try:
+            print("cacaquipue")
+            # Connect to database
+            db = sqlite3.connect("crawl.db")
+            db_cursor = db.cursor()
+
+            # Get queue
+            db_cursor.execute("SELECT id, url FROM queue ORDER BY id LIMIT 10")
+            queue = db_cursor.fetchmany(10)
+            print(queue)
+            self.queue = [u[1] for u in queue]
+            ids = [u[0] for u in queue]
+
+            # Delete these URLs from queue db
+            db_cursor.execute(f"DELETE FROM queue WHERE id IN ({','.join('?' for _ in ids)})", ids)
+            db.commit()
+
+        finally:
+            db.close()
 
     def __request(self):
         try:
@@ -43,6 +78,10 @@ class Crawler:
     def __get_links(self):
         # Get all a tags
         links = self.page.find_all("a")
+
+        # Connect to database
+        db = sqlite3.connect("crawl.db")
+        db_cursor = db.cursor()
 
         # Get & format all links
         for a in links:
@@ -67,35 +106,48 @@ class Crawler:
                 else:
                     url = None
 
-                # Add url if url is not in queue or has never been visited
+                # Add url if url in queue is not in queue or has never been visited
                 if url:
                     parsed_url = urlparse(url)
                     url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}".rstrip('/')
-                    if not url in self.visited_urls and not url in self.urls:
-                        self.urls.append(url)
+                    if not url in self.visited_urls and not url in self.queue:
+                        # Add url in database queue
+                        db_cursor.execute(f"INSERT INTO queue (url) VALUES (?)", (url,))
+
+        # Add URLs in queue & close connection
+        db.commit()
+        db.close()
 
     def __save_page(self):
         print("caca")
         # Create page's file's information
         page_filename = f"{hashlib.blake2b(self.url.encode("utf-8"), digest_size=16).hexdigest()}.html"  # Filename : hashed page's url
-        page_filepath = pathlib.PurePath(pathlib.Path("Pages"), page_filename[:2], page_filename)
+        self.page_filepath = pathlib.PurePath(pathlib.Path("Pages"), page_filename[:2], page_filename)
 
         # Create Directory if it doesn't exist
-        if not os.path.exists(os.path.dirname(page_filepath)):
-            os.makedirs(os.path.dirname(page_filepath))
+        if not os.path.exists(os.path.dirname(self.page_filepath)):
+            os.makedirs(os.path.dirname(self.page_filepath))
 
         # Write file
-        with open(page_filepath, "w", encoding="utf-8") as page_file:
+        with open(self.page_filepath, "w", encoding="utf-8") as page_file:
             page_file.write(self.page.prettify())
 
     def run(self):
-        # while self.urls:
-        for _ in range(10):
+        # Initialization
+        self.init()
+
+        # running = True
+        # while running:
+        for _ in range(3):
+            # Load queue if queue is empty
+            if len(self.queue) == 0:
+                self.__load_queue()
+
             # Get URL
-            self.url = self.urls.pop(0)  # Get URl and delete it
+            self.url = self.queue.pop(0)  # Get URl and delete it
 
             print(f"URl de la page : {self.url}")
-            print(f"Nombre de sites à visiter : {len(self.urls)}")
+            print(f"Nombre de sites à visiter : {len(self.queue)}")
             print(f"Nombre de site visités : {len(self.visited_urls)}")
 
             self.robots_txt.can_visit(url=self.url)
@@ -114,8 +166,8 @@ class Crawler:
                     if self.robots_txt.authorizations["follow"]:
                         self.__get_links()
 
-                    # Save page's content
-                    self.__save_page()
+                    # Save datas
+                    self.__save_page()  # Save page
 
             print("----------------------------")
             time.sleep(1)  # Wait not to DDOS host
