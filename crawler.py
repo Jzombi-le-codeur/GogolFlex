@@ -26,22 +26,29 @@ class Crawler:
         self.response = requests.Response()
         self.page = BeautifulSoup()
         self.page_filepath = pathlib.PurePath()
-        self.visited_urls = []
 
         # Robots.txt
         self.robots_txt = RobotsTxt(crawler=self)
 
     def init(self):
         # Create database
-        db = sqlite3.connect("crawl.db")
-        db.execute("""
-        CREATE TABLE IF NOT EXISTS queue (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            url TEXT
-        )
-        """)
-        db.commit()
-        db.close()
+        if not os.path.exists("crawl.db"):
+            db = sqlite3.connect("crawl.db")
+            db.execute("""
+            CREATE TABLE IF NOT EXISTS queue (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT
+            )
+            """)
+            db.execute("""
+            CREATE TABLE IF NOT EXISTS visited_urls (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT,
+                indexation INTEGER
+            )
+            """)
+            db.commit()
+            db.close()
 
     def __load_queue(self):
         try:
@@ -71,9 +78,43 @@ class Crawler:
         except requests.exceptions.RequestException:
             self.response = None
 
+    def __mark_url_as_visited(self):
+        # Connect to database
+        db = sqlite3.connect("crawl.db")
+
+        # Add URL in visited_urls
+        db.execute("INSERT INTO visited_urls (url, indexation) VALUES (?, ?)", (
+            self.url,
+            int(self.robots_txt.authorizations["index"]),
+        ))
+        db.commit()
+
+        # Close database
+        db.close()
+
     def __get_page(self):
         # Parse page code
         self.page = BeautifulSoup(self.response.text, features="html.parser")
+
+    def __check_if_page_has_been_visited(self, url):
+        db = sqlite3.connect("crawl.db")
+        db_cursor = db.cursor()
+        db_cursor.execute("SELECT 1 FROM visited_urls WHERE url = (?)", (url,))
+        if db_cursor.fetchone():
+            return True
+
+        else:
+            return False
+
+    def __check_if_page_is_in_queue(self, url):
+        db = sqlite3.connect("crawl.db")
+        db_cursor = db.cursor()
+        db_cursor.execute("SELECT 1 FROM queue WHERE url = (?)", (url,))
+        if db_cursor.fetchone():
+            return True
+
+        else:
+            return False
 
     def __get_links(self):
         # Get all a tags
@@ -110,7 +151,7 @@ class Crawler:
                 if url:
                     parsed_url = urlparse(url)
                     url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}".rstrip('/')
-                    if not url in self.visited_urls and not url in self.queue:
+                    if not self.__check_if_page_has_been_visited(url=url) and not self.__check_if_page_is_in_queue(url=url):
                         # Add url in database queue
                         db_cursor.execute(f"INSERT INTO queue (url) VALUES (?)", (url,))
 
@@ -148,7 +189,6 @@ class Crawler:
 
             print(f"URl de la page : {self.url}")
             print(f"Nombre de sites à visiter : {len(self.queue)}")
-            print(f"Nombre de site visités : {len(self.visited_urls)}")
 
             self.robots_txt.can_visit(url=self.url)
             if self.robots_txt.authorizations["visit"]:
@@ -159,7 +199,7 @@ class Crawler:
                     self.robots_txt.get_authorizations()
 
                     # Get page's links & information
-                    self.visited_urls.append(self.url)
+                    self.__mark_url_as_visited()
                     self.__get_page()  # Get page code
 
                     # Get page's links
