@@ -44,7 +44,8 @@ class Crawler:
             CREATE TABLE IF NOT EXISTS visited_urls (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 url TEXT,
-                indexation INTEGER
+                indexation INTEGER,
+                pagepath TEXT
             )
             """)
             db.commit()
@@ -83,11 +84,14 @@ class Crawler:
         db = sqlite3.connect("crawl.db")
 
         # Add URL in visited_urls
-        db.execute("INSERT INTO visited_urls (url, indexation) VALUES (?, ?)", (
+        print("Page filepath :", self.page_filepath)
+        db.execute("INSERT INTO visited_urls (url, indexation, pagepath) VALUES (?, ?, ?)", (
             self.url,
             int(self.robots_txt.authorizations["index"]),
+            self.page_filepath.name,
         ))
         db.commit()
+        print("PROUTTTT NUCLEAIRE")
 
         # Close database
         db.close()
@@ -163,6 +167,7 @@ class Crawler:
         print("caca")
         # Create page's file's information
         page_filename = f"{hashlib.blake2b(self.url.encode("utf-8"), digest_size=16).hexdigest()}.html"  # Filename : hashed page's url
+        print("FILENAME :", page_filename)
         self.page_filepath = pathlib.PurePath(pathlib.Path("Pages"), page_filename[:2], page_filename)
 
         # Create Directory if it doesn't exist
@@ -199,15 +204,16 @@ class Crawler:
                     self.robots_txt.get_authorizations()
 
                     # Get page's links & information
-                    self.__mark_url_as_visited()
+                    print("PROUTTTT")
                     self.__get_page()  # Get page code
+
+                    # Save datas
+                    self.__save_page()  # Save page
+                    self.__mark_url_as_visited()  # Save datas
 
                     # Get page's links
                     if self.robots_txt.authorizations["follow"]:
                         self.__get_links()
-
-                    # Save datas
-                    self.__save_page()  # Save page
 
             print("----------------------------")
             time.sleep(1)  # Wait not to DDOS host
