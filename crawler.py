@@ -45,7 +45,7 @@ class Crawler:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 url TEXT,
                 indexation INTEGER,
-                pagepath TEXT
+                page_filename TEXT
             )
             """)
             db.commit()
@@ -85,7 +85,7 @@ class Crawler:
 
         # Add URL in visited_urls
         print("Page filepath :", self.page_filepath)
-        db.execute("INSERT INTO visited_urls (url, indexation, pagepath) VALUES (?, ?, ?)", (
+        db.execute("INSERT INTO visited_urls (url, indexation, page_filename) VALUES (?, ?, ?)", (
             self.url,
             int(self.robots_txt.authorizations["index"]),
             self.page_filepath.name,
