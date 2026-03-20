@@ -385,3 +385,7 @@ class Parser:
 
         # Get page title
         self.__get_page_title()
+
+
+crawler = Crawler()
+crawler.run()
