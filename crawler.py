@@ -45,7 +45,8 @@ class Crawler:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 url TEXT,
                 indexation INTEGER,
-                page_filename TEXT
+                page_filename TEXT,
+                parsed INTEGER
             )
             """)
             db.commit()
@@ -85,10 +86,11 @@ class Crawler:
 
         # Add URL in visited_urls
         print("Page filepath :", self.page_filepath)
-        db.execute("INSERT INTO visited_urls (url, indexation, page_filename) VALUES (?, ?, ?)", (
+        db.execute("INSERT INTO visited_urls (url, indexation, page_filename, parsed) VALUES (?, ?, ?, ?)", (
             self.url,
             int(self.robots_txt.authorizations["index"]),
             self.page_filepath.name,
+            0,
         ))
         db.commit()
         print("PROUTTTT NUCLEAIRE")
@@ -309,27 +311,40 @@ class RobotsTxt:
 
 class Parser:
     def __init__(self):
-        self.page_informations = {"url": str(), "page_filename": str(), "title": str()}
+        self.page_informations = {"id": int(), "url": str(), "page_filename": str(), "title": str()}
         self.page_code = BeautifulSoup()
+
+    def init(self):
+        db = sqlite3.connect("parse.db")
+        db.execute("""
+                    CREATE TABLE IF NOT EXISTS page_informations (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        url TEXT,
+                        page_filename TEXT,
+                        title TEXT
+                    )
+                    """)
 
     def __get_crawl_results(self):
         # Get visited_urls datas
         db = sqlite3.connect("crawl.db")
         db_cursor = db.cursor()
-        db_cursor.execute("SELECT url, indexation, page_filename FROM visited_urls ORDER BY id LIMIT 1")
+        db_cursor.execute("SELECT id, url, indexation, page_filename FROM visited_urls WHERE parsed=0 ORDER BY id LIMIT 1")
         page_informations = db_cursor.fetchone()
 
         # Get informations
+        print(page_informations)
         if bool(page_informations[1]):
-            self.page_informations["url"] = page_informations[0]
-            self.page_informations["page_filepath"] = page_informations[2]
+            self.page_informations["id"] = page_informations[0]
+            self.page_informations["url"] = page_informations[1]
+            self.page_informations["page_filename"] = page_informations[3]
 
         db.close()
 
     def __get_page_code(self):
         # Get page code
-        page_filepath = pathlib.PurePath("Pages", self.page_informations["page_filepath"][:2],
-                                         self.page_informations["page_filepath"])
+        page_filepath = pathlib.PurePath("Pages", self.page_informations["page_filename"][:2],
+                                         self.page_informations["page_filename"])
         with open(page_filepath, encoding="utf-8") as page_file:
             self.page_code = BeautifulSoup(page_file.read(), features="html.parser")
 
@@ -376,7 +391,27 @@ class Parser:
         # Save URL in page_informations
         self.page_informations["title"] = title.strip()
 
+    def __save_datas(self):
+        # Mark page as parsed
+        db = sqlite3.connect("crawl.db")
+        db.execute("UPDATE visited_urls SET parsed=1 WHERE id=?", (self.page_informations["id"],))
+        db.commit()
+        db.close()
+
+        # Save informations
+        db = sqlite3.connect("parse.db")
+        db.execute("INSERT INTO page_informations (url, page_filename, title) VALUES (?, ?, ?)", (
+            self.page_informations["url"],
+            self.page_informations["page_filename"],
+            self.page_informations["title"],
+        ))
+        db.commit()
+        db.close()
+
     def run(self):
+        # Initialize database
+        self.init()
+
         # Get basic page's information (url, index, pagepath)
         self.__get_crawl_results()
 
@@ -386,6 +421,11 @@ class Parser:
         # Get page title
         self.__get_page_title()
 
+        # Save informations
+        self.__save_datas()
 
-crawler = Crawler()
-crawler.run()
+
+# crawler = Crawler()
+# crawler.run()
+parser = Parser()
+parser.run()
