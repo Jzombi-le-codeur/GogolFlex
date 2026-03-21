@@ -317,13 +317,13 @@ class Parser:
     def init(self):
         db = sqlite3.connect("parse.db")
         db.execute("""
-                    CREATE TABLE IF NOT EXISTS page_informations (
-                        id INTEGER PRIMARY KEY AUTOINCREMENT,
-                        url TEXT,
-                        page_filename TEXT,
-                        title TEXT
-                    )
-                    """)
+        CREATE TABLE IF NOT EXISTS page_informations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            url TEXT,
+            page_filename TEXT,
+            title TEXT
+        )
+        """)
 
     def __get_crawl_results(self):
         # Get visited_urls datas
@@ -425,7 +425,7 @@ class Parser:
         self.__save_datas()
 
 
-# crawler = Crawler()
-# crawler.run()
+crawler = Crawler()
+crawler.run()
 parser = Parser()
 parser.run()
