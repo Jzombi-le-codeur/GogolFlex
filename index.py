@@ -30,6 +30,12 @@ class Indexer:
             frequency INTEGER
         )
         """)
+        db.execute("""
+        CREATE TABLE IF NOT EXISTS term_documents (
+            word TEXT PRIMARY KEY,
+            documents_number INTEGER
+        )
+        """)
         db.commit()
         db.close()
 
@@ -65,7 +71,7 @@ class Indexer:
 
     def __count_words(self):
         # Tokenize page text
-        self.page_text = re.sub(r"['\-,!?.*]", " ", self.page_text)  # Remove some symbols from text
+        self.page_text = re.sub(r"[’'/\-,!?.*()]", " ", self.page_text)  # Remove some symbols from text
         tokens = self.page_text.split()  # Tokenize
         
         # Get word's frequencies in page
@@ -91,11 +97,22 @@ class Indexer:
     def __save_frequencies(self):
         db = sqlite3.connect("index.db")
         for token in self.frequencies.keys():
+            # Save word's frequencies in page
             db.execute("INSERT INTO inverted_index (word, page_id, frequency) VALUES (?, ?, ?)", (
                 token,
                 self.page_informations["id"],
                 self.frequencies[token],
             ))
+
+            # Update the number of pages with this word
+            db.execute("""INSERT INTO term_documents (word, documents_number) VALUES (?, 1)
+            ON CONFLICT(word) DO UPDATE SET documents_number = documents_number + 1""", (
+                token,
+            ))
+
+        # Update the total number of pages
+        db.execute("""INSERT INTO term_documents (word, documents_number) VALUES ('', 1)
+        ON CONFLICT(word) DO UPDATE SET documents_number = documents_number + 1""")
 
         db.commit()
         db.close()
