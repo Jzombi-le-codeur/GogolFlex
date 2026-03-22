@@ -60,8 +60,13 @@ class Crawler:
             db_cursor = db.cursor()
 
             # Get queue
-            db_cursor.execute("SELECT id, url FROM queue ORDER BY id LIMIT 10")
-            queue = db_cursor.fetchmany(10)
+            queue = list()
+            while not queue:
+                db_cursor.execute("SELECT id, url FROM queue ORDER BY id LIMIT 10")
+                queue = db_cursor.fetchmany(10)
+                if not queue:
+                    time.sleep(1)
+
             print(queue)
             self.queue = [u[1] for u in queue]
             ids = [u[0] for u in queue]
@@ -311,6 +316,7 @@ class RobotsTxt:
 
 class Parser:
     def __init__(self):
+        self.pages_informations = []  # {"id": int(), "url": str(), "page_filename": str(), "title": str()}
         self.page_informations = {"id": int(), "url": str(), "page_filename": str(), "title": str()}
         self.page_code = BeautifulSoup()
 
@@ -329,15 +335,21 @@ class Parser:
         # Get visited_urls datas
         db = sqlite3.connect("crawl.db")
         db_cursor = db.cursor()
-        db_cursor.execute("SELECT id, url, indexation, page_filename FROM visited_urls WHERE parsed=0 ORDER BY id LIMIT 1")
-        page_informations = db_cursor.fetchone()
+        pages_informations = list()
+        while not pages_informations:
+            db_cursor.execute("SELECT id, url, indexation, page_filename FROM visited_urls WHERE parsed=0 ORDER BY id LIMIT 10")
+            pages_informations = db_cursor.fetchall()
+            if not pages_informations:
+                time.sleep(1)
 
-        # Get informations
-        print(page_informations)
-        if bool(page_informations[1]):
-            self.page_informations["id"] = page_informations[0]
-            self.page_informations["url"] = page_informations[1]
-            self.page_informations["page_filename"] = page_informations[3]
+        for page_infos in pages_informations:
+            # Get informations
+            if bool(page_infos[2]):
+                page_informations = {}
+                page_informations["id"] = page_infos[0]
+                page_informations["url"] = page_infos[1]
+                page_informations["page_filename"] = page_infos[3]
+                self.pages_informations.append(page_informations)
 
         db.close()
 
@@ -412,17 +424,25 @@ class Parser:
         # Initialize database
         self.init()
 
-        # Get basic page's information (url, index, pagepath)
-        self.__get_crawl_results()
+        for _ in range(3):
+            # Get basic pages' information (url, index, pagepath)
+            if not self.pages_informations:
+                self.__get_crawl_results()
 
-        # Get page code
-        self.__get_page_code()
+            print(self.pages_informations)
+            # Get page's informations
+            self.page_informations = self.pages_informations.pop(0)
 
-        # Get page title
-        self.__get_page_title()
+            print(self.page_informations)
 
-        # Save informations
-        self.__save_datas()
+            # Get page code
+            self.__get_page_code()
+
+            # Get page title
+            self.__get_page_title()
+
+            # Save informations
+            self.__save_datas()
 
 
 crawler = Crawler()

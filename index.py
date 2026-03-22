@@ -1,11 +1,14 @@
 import pathlib
 import sqlite3
+import time
+
 from bs4 import BeautifulSoup
 import re
 
 
 class Indexer:
     def __init__(self):
+        self.pages_informations = []
         self.page_informations = {"id": int(), "url": str(), "page_filename": str(), "title": str()}
         self.page_text = str()
         self.frequencies = dict()
@@ -30,16 +33,30 @@ class Indexer:
         db.commit()
         db.close()
 
-    def __get_page_content(self):
+    def __get_pages_informations(self):
         # Get datas
         db = sqlite3.connect("parse.db")
         db_cursor = db.cursor()
-        db_cursor.execute("SELECT id, url, page_filename, title FROM page_informations ORDER BY id LIMIT 1")
-        self.page_informations["id"], self.page_informations["url"], self.page_informations["page_filename"], self.page_informations["title"] = db_cursor.fetchone()
+        pages_informations = list()
+        while not pages_informations:
+            db_cursor.execute("SELECT id, url, page_filename, title FROM page_informations ORDER BY id LIMIT 10")
+            pages_informations = db_cursor.fetchall()
+            if not pages_informations:
+                time.sleep(1)
+                
         db.close()
+        
+        for page_infos in pages_informations:
+            page_informations = dict()
+            page_informations["id"], page_informations["url"], page_informations["page_filename"], \
+            page_informations["title"] = page_infos
+            self.pages_informations.append(page_informations)
 
+    def __get_page_code(self):
         # Get page code
-        page_path = pathlib.PurePath("Pages", self.page_informations["page_filename"][:2], self.page_informations["page_filename"])
+        page_path = pathlib.PurePath("Pages", self.page_informations["page_filename"][:2],
+                                     self.page_informations["page_filename"])
+        print(page_path)
         with open(page_path, "r", encoding="utf-8") as page_file:
             page_code = BeautifulSoup(page_file.read(), features="html.parser")
 
@@ -83,14 +100,17 @@ class Indexer:
         db.commit()
         db.close()
 
-        print(sum(self.frequencies.values()))
-
     def run(self):
         self.init()
-        self.__get_page_content()
-        self.__count_words()
-        self.__save_page_informations()
-        self.__save_frequencies()
+        for _ in range(3):
+            if not self.pages_informations:
+                self.__get_pages_informations()
+                
+            self.page_informations = self.pages_informations.pop(0)
+            self.__get_page_code()
+            self.__count_words()
+            self.__save_page_informations()
+            self.__save_frequencies()
 
 
 indexer = Indexer()
