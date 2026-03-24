@@ -1,7 +1,6 @@
 import pathlib
 import sqlite3
 import time
-
 from bs4 import BeautifulSoup
 import re
 
@@ -16,18 +15,12 @@ class Indexer:
     def init(self):
         db = sqlite3.connect("index.db")
         db.execute("""
-        CREATE TABLE IF NOT EXISTS page_informations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            url TEXT,
-            title TEXT,
-            total_words INTEGER
-        )
-        """)
-        db.execute("""
         CREATE TABLE IF NOT EXISTS inverted_index (
             word TEXT,
             page_id INTEGER,
-            frequency INTEGER
+            url TEXT,
+            title TEXT,
+            tf REAL
         )
         """)
         db.execute("""
@@ -49,13 +42,13 @@ class Indexer:
             pages_informations = db_cursor.fetchall()
             if not pages_informations:
                 time.sleep(1)
-                
+
         db.close()
-        
+
         for page_infos in pages_informations:
             page_informations = dict()
             page_informations["id"], page_informations["url"], page_informations["page_filename"], \
-            page_informations["title"] = page_infos
+                page_informations["title"] = page_infos
             self.pages_informations.append(page_informations)
 
     def __get_page_code(self):
@@ -73,7 +66,7 @@ class Indexer:
         # Tokenize page text
         self.page_text = re.sub(r"[’'/\-,!?.*()]", " ", self.page_text)  # Remove some symbols from text
         tokens = self.page_text.split()  # Tokenize
-        
+
         # Get word's frequencies in page
         for token in tokens:
             token = token.lower()
@@ -85,23 +78,15 @@ class Indexer:
 
     def __save_page_informations(self):
         db = sqlite3.connect("index.db")
-        db.execute("INSERT INTO page_informations (id, url, title, total_words) VALUES (?, ?, ?, ?)", (
-            self.page_informations["id"],
-            self.page_informations["url"],
-            self.page_informations["title"],
-            len(self.frequencies.keys()),
-        ))
-        db.commit()
-        db.close()
-
-    def __save_frequencies(self):
-        db = sqlite3.connect("index.db")
         for token in self.frequencies.keys():
-            # Save word's frequencies in page
-            db.execute("INSERT INTO inverted_index (word, page_id, frequency) VALUES (?, ?, ?)", (
+            # Save page's TF
+            print(self.page_informations)
+            db.execute("INSERT INTO inverted_index (word, page_id, url, title, tf) VALUES (?, ?, ?, ?, ?)", (
                 token,
                 self.page_informations["id"],
-                self.frequencies[token],
+                self.page_informations["url"],
+                self.page_informations["title"],
+                self.frequencies[token] / len(self.frequencies.keys()),
             ))
 
             # Update the number of pages with this word
@@ -122,12 +107,11 @@ class Indexer:
         for _ in range(3):
             if not self.pages_informations:
                 self.__get_pages_informations()
-                
+
             self.page_informations = self.pages_informations.pop(0)
             self.__get_page_code()
             self.__count_words()
             self.__save_page_informations()
-            self.__save_frequencies()
 
 
 indexer = Indexer()
