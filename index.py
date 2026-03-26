@@ -3,6 +3,7 @@ import sqlite3
 import time
 from bs4 import BeautifulSoup
 import re
+import math
 
 
 class Indexer:
@@ -16,11 +17,13 @@ class Indexer:
         db = sqlite3.connect("index.db")
         db.execute("""
         CREATE TABLE IF NOT EXISTS inverted_index (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
             word TEXT,
             page_id INTEGER,
             url TEXT,
             title TEXT,
-            tf REAL
+            tf REAL,
+            tf_idf REAL
         )
         """)
         db.execute("""
@@ -37,10 +40,12 @@ class Indexer:
         db = sqlite3.connect("parse.db")
         db_cursor = db.cursor()
         pages_informations = list()
-        while not pages_informations:
+        i = 0
+        while not pages_informations and i < 400:
             db_cursor.execute("SELECT id, url, page_filename, title FROM page_informations ORDER BY id LIMIT 10")
             pages_informations = db_cursor.fetchall()
             if not pages_informations:
+                i += 1
                 time.sleep(1)
 
         db.close()
@@ -55,7 +60,6 @@ class Indexer:
         # Get page code
         page_path = pathlib.PurePath("Pages", self.page_informations["page_filename"][:2],
                                      self.page_informations["page_filename"])
-        print(page_path)
         with open(page_path, "r", encoding="utf-8") as page_file:
             page_code = BeautifulSoup(page_file.read(), features="html.parser")
 
@@ -63,6 +67,7 @@ class Indexer:
         self.page_text = page_code.find("title").get_text() + page_code.find("body").get_text()
 
     def __count_words(self):
+        self.frequencies = {}
         # Tokenize page text
         self.page_text = re.sub(r"[’'/\-,!?.*()]", " ", self.page_text)  # Remove some symbols from text
         tokens = self.page_text.split()  # Tokenize
@@ -80,13 +85,12 @@ class Indexer:
         db = sqlite3.connect("index.db")
         for token in self.frequencies.keys():
             # Save page's TF
-            print(self.page_informations)
             db.execute("INSERT INTO inverted_index (word, page_id, url, title, tf) VALUES (?, ?, ?, ?, ?)", (
                 token,
                 self.page_informations["id"],
                 self.page_informations["url"],
                 self.page_informations["title"],
-                self.frequencies[token] / len(self.frequencies.keys()),
+                self.frequencies[token] / sum(self.frequencies.values()),
             ))
 
             # Update the number of pages with this word
@@ -102,9 +106,67 @@ class Indexer:
         db.commit()
         db.close()
 
+    def __calculate_tf_idf(self):
+        # Connect to database
+        db = sqlite3.connect("index.db")
+        db_cursor = db.cursor()
+
+        # Check queue
+        i = 1
+        n_pages_to_get = 20
+        db_cursor.execute("SELECT MAX(id) from inverted_index")
+        max_i = db_cursor.fetchone()[0]
+        db_cursor.execute("SELECT documents_number FROM term_documents WHERE word = ''")
+        total_documents_number = db_cursor.fetchone()[0]
+
+        # Calculate tf-idf score of each word
+        while i <= max_i:
+            print(f"I : {i}\nMaxI : {max_i}")
+            # Get TF's words
+            db_cursor.execute("SELECT word, tf FROM inverted_index WHERE id >= ? AND id < ? ORDER BY id", (
+                i,
+                i+n_pages_to_get,
+            ))
+            word_tfs = db_cursor.fetchall()
+
+            # Calculate tf idf
+            tf_idfs = list()
+            local_i = 0
+            for word, tf in word_tfs:
+                # Calculate IDF
+                db_cursor.execute("SELECT documents_number FROM term_documents WHERE word = ?", (word,))
+                documents_number_with_word = db_cursor.fetchone()[0]
+                print(f"Total_documents_number : {total_documents_number}\nDocuments_number_with_words : {documents_number_with_word}")
+                print("-----")
+                idf = math.log(total_documents_number/documents_number_with_word)
+
+                # Calculate tf_idf
+                tf_idf = tf*idf
+                print(f"Word : {word}\nTF : {tf}\nIDF : {idf}\nTF-IDF : {tf_idf}")
+                print("----------")
+
+                # Update
+                tf_idfs.append((tf_idf, i+local_i))
+                local_i += 1
+
+            # Save TF-IDF
+            db_cursor.executemany("UPDATE inverted_index SET tf_idf = ? WHERE id = ?", tf_idfs)
+            db.commit()
+            print("Ajouté")
+
+            i += n_pages_to_get
+            print("-------------------------------------------")
+            # input("")
+
+        # Close database
+        db.close()
+
+    def calculate_tf_idf(self):
+        self.__calculate_tf_idf()
+
     def run(self):
         self.init()
-        for _ in range(3):
+        for _ in range(100):
             if not self.pages_informations:
                 self.__get_pages_informations()
 
@@ -113,6 +175,11 @@ class Indexer:
             self.__count_words()
             self.__save_page_informations()
 
+            print("Site traité")
+        print("---------------------------------------------------------------------------------------------")
+
+        self.__calculate_tf_idf()
+
 
 indexer = Indexer()
-indexer.run()
+indexer.calculate_tf_idf()

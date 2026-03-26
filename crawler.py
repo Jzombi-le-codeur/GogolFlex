@@ -21,7 +21,7 @@ class Crawler:
         }
 
         # URLs
-        self.queue = ["https://fr.wikipedia.org/wiki/Wikip%C3%A9dia:Accueil_principal"]
+        self.queue = ["https://fr.wikipedia.org/wiki/Wikip%C3%A9dia:Accueil_principal", "https://nicot3m.pages-perso.free.fr/", "https://fr.wikihow.com/Accueil"]
         self.url = self.queue[0]
         self.response = requests.Response()
         self.page = BeautifulSoup()
@@ -191,7 +191,7 @@ class Crawler:
 
         # running = True
         # while running:
-        for _ in range(3):
+        for _ in range(100):
             # Load queue if queue is empty
             if len(self.queue) == 0:
                 self.__load_queue()
@@ -424,7 +424,7 @@ class Parser:
         # Initialize database
         self.init()
 
-        for _ in range(3):
+        for _ in range(100):
             # Get basic pages' information (url, index, pagepath)
             if not self.pages_informations:
                 self.__get_crawl_results()
