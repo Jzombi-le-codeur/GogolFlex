@@ -334,4 +334,4 @@ class RobotsTxt:
 
 if __name__ == "__main__":
     crawler = Crawler()
-    crawler.run(100)
+    crawler.run()
