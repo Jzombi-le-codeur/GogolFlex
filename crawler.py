@@ -19,6 +19,7 @@ class Crawler:
         self.headers = {
             "User-Agent": self.name
         }
+        self.db_timeout = 30
 
         # URLs
         self.queue = ["https://fr.wikipedia.org/wiki/Wikip%C3%A9dia:Accueil_principal", "https://nicot3m.pages-perso.free.fr/", "https://fr.wikihow.com/Accueil"]
@@ -33,7 +34,7 @@ class Crawler:
     def init(self):
         # Create database
         if not os.path.exists("crawl.db"):
-            db = sqlite3.connect("crawl.db")
+            db = sqlite3.connect("crawl.db", 10)
             db.execute("""
             CREATE TABLE IF NOT EXISTS queue (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -56,7 +57,7 @@ class Crawler:
         try:
             print("cacaquipue")
             # Connect to database
-            db = sqlite3.connect("crawl.db")
+            db = sqlite3.connect("crawl.db", timeout=self.db_timeout)
             db_cursor = db.cursor()
 
             # Get queue
@@ -87,7 +88,7 @@ class Crawler:
 
     def __mark_url_as_visited(self):
         # Connect to database
-        db = sqlite3.connect("crawl.db")
+        db = sqlite3.connect("crawl.db", timeout=self.db_timeout)
 
         # Add URL in visited_urls
         print("Page filepath :", self.page_filepath)
@@ -108,23 +109,27 @@ class Crawler:
         self.page = BeautifulSoup(self.response.text, features="html.parser")
 
     def __check_if_page_has_been_visited(self, url):
-        db = sqlite3.connect("crawl.db")
+        db = sqlite3.connect("crawl.db", timeout=self.db_timeout)
         db_cursor = db.cursor()
         db_cursor.execute("SELECT 1 FROM visited_urls WHERE url = (?)", (url,))
         if db_cursor.fetchone():
+            db.close()
             return True
 
         else:
+            db.close()
             return False
 
     def __check_if_page_is_in_queue(self, url):
-        db = sqlite3.connect("crawl.db")
+        db = sqlite3.connect("crawl.db", timeout=self.db_timeout)
         db_cursor = db.cursor()
         db_cursor.execute("SELECT 1 FROM queue WHERE url = (?)", (url,))
         if db_cursor.fetchone():
+            db.close()
             return True
 
         else:
+            db.close()
             return False
 
     def __get_links(self):
@@ -132,7 +137,7 @@ class Crawler:
         links = self.page.find_all("a")
 
         # Connect to database
-        db = sqlite3.connect("crawl.db")
+        db = sqlite3.connect("crawl.db", timeout=self.db_timeout)
         db_cursor = db.cursor()
 
         # Get & format all links
@@ -327,6 +332,6 @@ class RobotsTxt:
         self.get_meta_robots_authorizations()
 
 
-
-# crawler = Crawler()
-# crawler.run(i)
+if __name__ == "__main__":
+    crawler = Crawler()
+    crawler.run(100)

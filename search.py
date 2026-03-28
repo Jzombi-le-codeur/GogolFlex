@@ -33,4 +33,4 @@ class Searcher:
 
 
 searcher = Searcher()
-searcher.search("programmation", 20)
+searcher.search("wikipédia", 20)

@@ -6,12 +6,13 @@ import sqlite3
 
 class Parser:
     def __init__(self):
+        self.db_timeout = 30
         self.pages_informations = []  # {"id": int(), "url": str(), "page_filename": str(), "title": str()}
         self.page_informations = {"id": int(), "url": str(), "page_filename": str(), "title": str()}
         self.page_code = BeautifulSoup()
 
     def init(self):
-        db = sqlite3.connect("parse.db")
+        db = sqlite3.connect("parse.db", timeout=self.db_timeout)
         db.execute("""
         CREATE TABLE IF NOT EXISTS page_informations (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -24,10 +25,10 @@ class Parser:
 
     def __get_crawl_results(self):
         # Get visited_urls datas
-        db = sqlite3.connect("crawl.db")
+        db = sqlite3.connect("crawl.db", timeout=self.db_timeout)
         db_cursor = db.cursor()
         pages_informations = list()
-        while not pages_informations:
+        while not self.pages_informations:
             db_cursor.execute("SELECT id, url, indexation, page_filename FROM visited_urls WHERE parsed=0 ORDER BY id LIMIT 10")
             pages_informations = db_cursor.fetchall()
 
@@ -99,7 +100,7 @@ class Parser:
         self.page_informations["title"] = title.strip()
 
     def __is_page_in_db(self):
-        db = sqlite3.connect("parse.db")
+        db = sqlite3.connect("parse.db", timeout=self.db_timeout)
         db_cursor = db.cursor()
         db_cursor.execute("SELECT url FROM page_informations WHERE url = ?", (self.page_informations["url"],))
         res = db_cursor.fetchone()
@@ -108,14 +109,14 @@ class Parser:
 
     def __save_datas(self):
         # Mark page as parsed
-        db = sqlite3.connect("crawl.db")
+        db = sqlite3.connect("crawl.db", timeout=self.db_timeout)
         db.execute("UPDATE visited_urls SET parsed=1 WHERE id=?", (self.page_informations["id"],))
         db.commit()
         db.close()
 
         # Save informations
         if not self.__is_page_in_db():
-            db = sqlite3.connect("parse.db")
+            db = sqlite3.connect("parse.db", timeout=self.db_timeout)
             db.execute("INSERT INTO page_informations (url, page_filename, title, indexed) VALUES (?, ?, ?, ?)", (
                 self.page_informations["url"],
                 self.page_informations["page_filename"],
@@ -159,3 +160,8 @@ class Parser:
         else:
             for _ in range(i):
                 self.__run()
+
+
+if __name__ == "__main__":
+    parser = Parser()
+    parser.run()

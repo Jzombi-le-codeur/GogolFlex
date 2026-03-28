@@ -8,13 +8,14 @@ import math
 
 class Indexer:
     def __init__(self):
+        self.db_timeout = 30
         self.pages_informations = []
         self.page_informations = {"id": int(), "url": str(), "page_filename": str(), "title": str()}
         self.page_text = str()
         self.frequencies = dict()
 
     def init(self):
-        db = sqlite3.connect("index.db")
+        db = sqlite3.connect("index.db", timeout=self.db_timeout)
         db.execute("""
         CREATE TABLE IF NOT EXISTS inverted_index (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -37,7 +38,7 @@ class Indexer:
 
     def __get_pages_informations(self):
         # Get datas
-        db = sqlite3.connect("parse.db")
+        db = sqlite3.connect("parse.db", timeout=self.db_timeout)
         db_cursor = db.cursor()
         pages_informations = list()
         i = 0
@@ -82,7 +83,7 @@ class Indexer:
                 self.frequencies[token] += 1
 
     def __save_page_informations(self):
-        db = sqlite3.connect("index.db")
+        db = sqlite3.connect("index.db", timeout=self.db_timeout)
         for token in self.frequencies.keys():
             # Save page's TF
             db.execute("INSERT INTO inverted_index (word, page_id, url, title, tf) VALUES (?, ?, ?, ?, ?)", (
@@ -107,14 +108,14 @@ class Indexer:
         db.close()
 
         # Mark page as indexed
-        db = sqlite3.connect("parse.db")
+        db = sqlite3.connect("parse.db", timeout=self.db_timeout)
         db.execute("UPDATE page_informations SET indexed = 1 WHERE id = ?", (self.page_informations["id"],))
         db.commit()
         db.close()
 
     def __calculate_tf_idf(self):
         # Connect to database
-        db = sqlite3.connect("index.db")
+        db = sqlite3.connect("index.db", timeout=self.db_timeout)
         db_cursor = db.cursor()
 
         # Check queue
@@ -200,5 +201,6 @@ class Indexer:
                     self.__calculate_tf_idf()
 
 
-indexer = Indexer()
-indexer.run()
+if __name__ == "__main__":
+    indexer = Indexer()
+    indexer.run()
