@@ -223,7 +223,7 @@ class Crawler:
                         self.__get_links()
 
             print("----------------------------")
-            time.sleep(1)  # Wait not to DDOS host
+            time.sleep(self.robots_txt.crawl_delay)  # Wait not to DDOS host
 
 
 class RobotsTxt:
@@ -236,6 +236,7 @@ class RobotsTxt:
 
         # Page authorizations
         self.authorizations = {"visit": True, "index": True, "follow": True}
+        self.crawl_delay = 1
 
     def can_visit(self, url: str):
         # Get robots.txt url
@@ -251,6 +252,10 @@ class RobotsTxt:
 
             # Check if bot can visit the website
             self.authorizations["visit"] = rfp.can_fetch(useragent=self.name, url=url)
+
+            # Get Crawl-delay
+            crawl_delay = rfp.crawl_delay(self.name)
+            self.crawl_delay = crawl_delay if crawl_delay else 1
 
         except requests.exceptions.RequestException:
             self.authorizations["visit"] = False
