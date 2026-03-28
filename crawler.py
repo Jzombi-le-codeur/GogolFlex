@@ -185,45 +185,53 @@ class Crawler:
         with open(self.page_filepath, "w", encoding="utf-8") as page_file:
             page_file.write(self.page.prettify())
 
-    def run(self, i):
+    def __run(self):
+        # Load queue if queue is empty
+        if len(self.queue) == 0:
+            self.__load_queue()
+
+        # Get URL
+        self.url = self.queue.pop(0)  # Get URl and delete it
+
+        print(f"URl de la page : {self.url}")
+        print(f"Nombre de sites à visiter : {len(self.queue)}")
+
+        self.robots_txt.can_visit(url=self.url)
+        if self.robots_txt.authorizations["visit"]:
+            # Get response from page
+            self.__request()
+            if self.response:
+                # Get page's authorizations
+                self.robots_txt.get_authorizations()
+
+                # Get page's links & information
+                print("PROUTTTT")
+                self.__get_page()  # Get page code
+
+                # Save datas
+                self.__save_page()  # Save page
+                self.__mark_url_as_visited()  # Save datas
+
+                # Get page's links
+                if self.robots_txt.authorizations["follow"]:
+                    self.__get_links()
+
+        print("----------------------------")
+        time.sleep(self.robots_txt.crawl_delay)  # Wait not to DDOS host
+
+    def run(self, i: int = 0):
         # Initialization
         self.init()
 
-        # running = True
-        # while running:
-        for _ in range(i):
-            # Load queue if queue is empty
-            if len(self.queue) == 0:
-                self.__load_queue()
+        if i == 0:
+            running = True
+            while running:
+                self.__run()
 
-            # Get URL
-            self.url = self.queue.pop(0)  # Get URl and delete it
+        else:
+            for _ in range(i):
+                self.__run()
 
-            print(f"URl de la page : {self.url}")
-            print(f"Nombre de sites à visiter : {len(self.queue)}")
-
-            self.robots_txt.can_visit(url=self.url)
-            if self.robots_txt.authorizations["visit"]:
-                # Get response from page
-                self.__request()
-                if self.response:
-                    # Get page's authorizations
-                    self.robots_txt.get_authorizations()
-
-                    # Get page's links & information
-                    print("PROUTTTT")
-                    self.__get_page()  # Get page code
-
-                    # Save datas
-                    self.__save_page()  # Save page
-                    self.__mark_url_as_visited()  # Save datas
-
-                    # Get page's links
-                    if self.robots_txt.authorizations["follow"]:
-                        self.__get_links()
-
-            print("----------------------------")
-            time.sleep(self.robots_txt.crawl_delay)  # Wait not to DDOS host
 
 
 class RobotsTxt:
@@ -319,6 +327,6 @@ class RobotsTxt:
         self.get_meta_robots_authorizations()
 
 
-i = 30
+
 # crawler = Crawler()
 # crawler.run(i)

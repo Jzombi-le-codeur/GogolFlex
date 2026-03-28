@@ -128,25 +128,34 @@ class Parser:
         else:
             print("DEJA DEDANS")
 
-    def run(self, i):
+    def __run(self):
+        # Get basic pages' information (url, index, pagepath)
+        if not self.pages_informations:
+            self.__get_crawl_results()
+
+        # Get page's informations
+        self.page_informations = self.pages_informations.pop(0)
+
+        print(self.page_informations)
+
+        # Get page code
+        self.__get_page_code()
+
+        # Get page title
+        self.__get_page_title()
+
+        # Save informations
+        self.__save_datas()
+
+    def run(self, i: int = 0):
         # Initialize database
         self.init()
 
-        for _ in range(i):
-            # Get basic pages' information (url, index, pagepath)
-            if not self.pages_informations:
-                self.__get_crawl_results()
+        if i == 0:
+            running = True
+            while running:
+                self.__run()
 
-            # Get page's informations
-            self.page_informations = self.pages_informations.pop(0)
-
-            print(self.page_informations)
-
-            # Get page code
-            self.__get_page_code()
-
-            # Get page title
-            self.__get_page_title()
-
-            # Save informations
-            self.__save_datas()
+        else:
+            for _ in range(i):
+                self.__run()

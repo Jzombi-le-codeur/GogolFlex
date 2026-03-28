@@ -167,24 +167,37 @@ class Indexer:
         # Close database
         db.close()
 
-    def calculate_tf_idf(self):
-        self.__calculate_tf_idf()
+    def __run(self):
+        if not self.pages_informations:
+            self.__get_pages_informations()
 
-    def run(self):
-        self.init()
-        for _ in range(100):
-            if not self.pages_informations:
-                self.__get_pages_informations()
+        self.page_informations = self.pages_informations.pop(0)
+        self.__get_page_code()
+        self.__count_words()
+        self.__save_page_informations()
 
-            self.page_informations = self.pages_informations.pop(0)
-            self.__get_page_code()
-            self.__count_words()
-            self.__save_page_informations()
-
-            print("Site traité")
+        print("Site traité")
         print("---------------------------------------------------------------------------------------------")
 
-        self.__calculate_tf_idf()
+    def run(self, i_bfr_tf_idf: int = 10, i: int = 0):
+        self.init()
+
+        if i == 0:
+            running = True
+            j = 0
+            while running:
+                j += 1
+                self.__run()
+                if j%i_bfr_tf_idf == 0:
+                    self.__calculate_tf_idf()
+
+        else:
+            j = 0
+            for _ in range(i):
+                j += 1
+                self.__run()
+                if j % i_bfr_tf_idf == 0:
+                    self.__calculate_tf_idf()
 
 
 indexer = Indexer()
