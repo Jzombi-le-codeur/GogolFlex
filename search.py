@@ -13,7 +13,7 @@ class Searcher:
         db_cursor = db.cursor()
 
         # Search term
-        db_cursor.execute("SELECT title, url FROM inverted_index WHERE word = ? ORDER BY tf_idf LIMIT ?", (
+        db_cursor.execute("SELECT title, url FROM inverted_index WHERE word = ? ORDER BY tf_idf DESC LIMIT ?", (
             query,
             n_results,
         ))
@@ -33,4 +33,4 @@ class Searcher:
 
 
 searcher = Searcher()
-searcher.search("wikipédia", 20)
+searcher.search("don", 20)

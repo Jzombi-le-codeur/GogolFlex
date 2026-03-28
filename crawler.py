@@ -340,17 +340,21 @@ class Parser:
         while not pages_informations:
             db_cursor.execute("SELECT id, url, indexation, page_filename FROM visited_urls WHERE parsed=0 ORDER BY id LIMIT 10")
             pages_informations = db_cursor.fetchall()
+
+            for page_infos in pages_informations:
+                # Get informations
+                if bool(page_infos[2]):
+                    page_informations = {}
+                    page_informations["id"] = page_infos[0]
+                    page_informations["url"] = page_infos[1]
+                    page_informations["page_filename"] = page_infos[3]
+                    self.pages_informations.append(page_informations)
+
+                else:
+                    db.execute("UPDATE visited_urls SET parsed=1 WHERE id=?", (page_infos[0],))
+
             if not pages_informations:
                 time.sleep(1)
-
-        for page_infos in pages_informations:
-            # Get informations
-            if bool(page_infos[2]):
-                page_informations = {}
-                page_informations["id"] = page_infos[0]
-                page_informations["url"] = page_infos[1]
-                page_informations["page_filename"] = page_infos[3]
-                self.pages_informations.append(page_informations)
 
         db.close()
 
@@ -459,7 +463,7 @@ class Parser:
 
 
 i = 30
-crawler = Crawler()
-crawler.run(i)
+# crawler = Crawler()
+# crawler.run(i)
 parser = Parser()
 parser.run(i)
