@@ -185,13 +185,13 @@ class Crawler:
         with open(self.page_filepath, "w", encoding="utf-8") as page_file:
             page_file.write(self.page.prettify())
 
-    def run(self):
+    def run(self, i):
         # Initialization
         self.init()
 
         # running = True
         # while running:
-        for _ in range(100):
+        for _ in range(i):
             # Load queue if queue is empty
             if len(self.queue) == 0:
                 self.__load_queue()
@@ -327,7 +327,8 @@ class Parser:
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             url TEXT,
             page_filename TEXT,
-            title TEXT
+            title TEXT,
+            indexed INTEGER
         )
         """)
 
@@ -403,6 +404,14 @@ class Parser:
         # Save URL in page_informations
         self.page_informations["title"] = title.strip()
 
+    def __is_page_in_db(self):
+        db = sqlite3.connect("parse.db")
+        db_cursor = db.cursor()
+        db_cursor.execute("SELECT url FROM page_informations WHERE url = ?", (self.page_informations["url"],))
+        res = db_cursor.fetchone()
+        print(res)
+        return True if res else False
+
     def __save_datas(self):
         # Mark page as parsed
         db = sqlite3.connect("crawl.db")
@@ -411,25 +420,29 @@ class Parser:
         db.close()
 
         # Save informations
-        db = sqlite3.connect("parse.db")
-        db.execute("INSERT INTO page_informations (url, page_filename, title) VALUES (?, ?, ?)", (
-            self.page_informations["url"],
-            self.page_informations["page_filename"],
-            self.page_informations["title"],
-        ))
-        db.commit()
-        db.close()
+        if not self.__is_page_in_db():
+            db = sqlite3.connect("parse.db")
+            db.execute("INSERT INTO page_informations (url, page_filename, title, indexed) VALUES (?, ?, ?, ?)", (
+                self.page_informations["url"],
+                self.page_informations["page_filename"],
+                self.page_informations["title"],
+                0,
+            ))
+            db.commit()
+            db.close()
 
-    def run(self):
+        else:
+            print("DEJA DEDANS")
+
+    def run(self, i):
         # Initialize database
         self.init()
 
-        for _ in range(100):
+        for _ in range(i):
             # Get basic pages' information (url, index, pagepath)
             if not self.pages_informations:
                 self.__get_crawl_results()
 
-            print(self.pages_informations)
             # Get page's informations
             self.page_informations = self.pages_informations.pop(0)
 
@@ -445,7 +458,8 @@ class Parser:
             self.__save_datas()
 
 
+i = 30
 crawler = Crawler()
-crawler.run()
+crawler.run(i)
 parser = Parser()
-parser.run()
+parser.run(i)

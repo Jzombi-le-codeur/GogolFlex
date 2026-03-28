@@ -42,7 +42,7 @@ class Indexer:
         pages_informations = list()
         i = 0
         while not pages_informations and i < 400:
-            db_cursor.execute("SELECT id, url, page_filename, title FROM page_informations ORDER BY id LIMIT 10")
+            db_cursor.execute("SELECT id, url, page_filename, title FROM page_informations WHERE indexed = 0 ORDER BY id LIMIT 10")
             pages_informations = db_cursor.fetchall()
             if not pages_informations:
                 i += 1
@@ -103,6 +103,12 @@ class Indexer:
         db.execute("""INSERT INTO term_documents (word, documents_number) VALUES ('', 1)
         ON CONFLICT(word) DO UPDATE SET documents_number = documents_number + 1""")
 
+        db.commit()
+        db.close()
+
+        # Mark page as indexed
+        db = sqlite3.connect("parse.db")
+        db.execute("UPDATE page_informations SET indexed = 1 WHERE id = ?", (self.page_informations["id"],))
         db.commit()
         db.close()
 
@@ -182,4 +188,4 @@ class Indexer:
 
 
 indexer = Indexer()
-indexer.calculate_tf_idf()
+indexer.run()
