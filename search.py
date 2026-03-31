@@ -6,20 +6,34 @@ class Searcher:
         self.results = []  # {"title": title, "url": url}
 
     def __search(self, query: str, n_results: int):
-        # (only work for 1 word in query)
+        # Split query into many terms
+        query = query.split()
 
         # Connect to database
         db = sqlite3.connect("index.db")
         db_cursor = db.cursor()
 
-        # Search term
-        db_cursor.execute("SELECT title, url FROM inverted_index WHERE word = ? ORDER BY tf_idf DESC LIMIT ?", (
-            query,
-            n_results,
-        ))
+        # Build SQL query
+        sql_query = ["SELECT page_id FROM inverted_index WHERE word = ?" for _ in query]
+        sql_query = " INTERSECT ".join(sql_query)
+
+        # Get results
+        db_cursor.execute(f"""
+        SELECT title, url, SUM(tf_idf) as score 
+        FROM inverted_index 
+        WHERE word in ({', '.join([f"'{term}'" for term in query])})
+        AND page_id IN (
+            {sql_query}
+        )
+        GROUP BY page_id
+        ORDER BY score DESC
+        LIMIT ?
+        """, tuple(query + [n_results]))
         results = db_cursor.fetchall()
-        for title, url in results:
+        for title, url, _ in results:
             self.results.append({"title": title, "url": url})
+
+        db.close()
 
     def __display_results(self):
         print(f"{len(self.results)} RESULTATS")
@@ -33,4 +47,4 @@ class Searcher:
 
 
 searcher = Searcher()
-searcher.search("wikipédia", 20)
+searcher.search("wikipedia aide", 20)
