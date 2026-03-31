@@ -41,10 +41,11 @@ class Searcher:
             print(f"Page : {result['title']}\n> {result['url']}")
             print("--------------------")
 
-    def search(self, query: str, n_results: int):
+    def search(self, n_results: int):
+        query = input("> ")
         self.__search(query=query, n_results=n_results)
         self.__display_results()
 
 
 searcher = Searcher()
-searcher.search("wikipedia aide", 20)
+searcher.search(20)
