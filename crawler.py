@@ -31,6 +31,17 @@ class Crawler:
         # Robots.txt
         self.robots_txt = RobotsTxt(crawler=self)
 
+    def __check_if_db_is_empty(self):
+        with sqlite3.connect("crawl.db", timeout=self.db_timeout) as db:
+            db_cursor = db.cursor()
+            db_cursor.execute("SELECT id FROM queue LIMIT 1")
+            # Check if db is empty
+            if not db_cursor.fetchone():
+                return True
+
+            else:
+                return False
+
     def init(self):
         # Create database
         if not os.path.exists("crawl.db"):
@@ -51,6 +62,12 @@ class Crawler:
                 )
                 """)
                 db.commit()
+
+        else:
+            # Load queue if there are urls in db's queue
+            if not self.__check_if_db_is_empty():
+                self.queue.pop()
+                self.__load_queue()
 
     def __load_queue(self):
         print("cacaquipue")
