@@ -113,7 +113,7 @@ class Indexer:
         db.commit()
         db.close()
 
-    def __calculate_tf_idf(self):
+    def calculate_tf_idf(self):
         # Connect to database
         db = sqlite3.connect("index.db", timeout=self.db_timeout)
         db_cursor = db.cursor()
@@ -136,13 +136,17 @@ class Indexer:
             ))
             word_tfs = db_cursor.fetchall()
 
+            # Get list of document's number with word in
+            words = [w for w, _ in word_tfs]
+            db_cursor.execute(f"SELECT word, documents_number FROM term_documents WHERE word IN ({','.join(['?']*len(words))})", words)
+            documents_number_with_words = dict(db_cursor.fetchall())
+
             # Calculate tf idf
             tf_idfs = list()
             local_i = 0
             for word, tf in word_tfs:
                 # Calculate IDF
-                db_cursor.execute("SELECT documents_number FROM term_documents WHERE word = ?", (word,))
-                documents_number_with_word = db_cursor.fetchone()[0]
+                documents_number_with_word = documents_number_with_words[word]
                 print(f"Total_documents_number : {total_documents_number}\nDocuments_number_with_words : {documents_number_with_word}")
                 print("-----")
                 idf = math.log(total_documents_number/documents_number_with_word)
@@ -190,7 +194,7 @@ class Indexer:
                 j += 1
                 self.__run()
                 if j%i_bfr_tf_idf == 0:
-                    self.__calculate_tf_idf()
+                    self.calculate_tf_idf()
 
         else:
             j = 0
@@ -198,9 +202,9 @@ class Indexer:
                 j += 1
                 self.__run()
                 if j % i_bfr_tf_idf == 0:
-                    self.__calculate_tf_idf()
+                    self.calculate_tf_idf()
 
 
 if __name__ == "__main__":
     indexer = Indexer()
-    indexer.run()
+    indexer.calculate_tf_idf()
