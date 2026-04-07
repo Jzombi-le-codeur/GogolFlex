@@ -84,6 +84,7 @@ class Indexer:
 
     def __save_page_informations(self):
         db = sqlite3.connect("index.db", timeout=self.db_timeout)
+        total_terms = sum(self.frequencies.values())
         for token in self.frequencies.keys():
             # Save page's TF
             db.execute("INSERT INTO inverted_index (word, page_id, url, title, tf) VALUES (?, ?, ?, ?, ?)", (
@@ -91,7 +92,7 @@ class Indexer:
                 self.page_informations["id"],
                 self.page_informations["url"],
                 self.page_informations["title"],
-                self.frequencies[token] / sum(self.frequencies.values()),
+                self.frequencies[token] / total_terms,
             ))
 
             # Update the number of pages with this word
