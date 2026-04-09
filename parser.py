@@ -22,6 +22,8 @@ class Parser:
             indexed INTEGER
         )
         """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_page_informations_url ON page_informations(url)")
+        db.close()
 
     def __get_crawl_results(self):
         # Get visited_urls datas

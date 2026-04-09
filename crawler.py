@@ -62,6 +62,8 @@ class Crawler:
                     parsed INTEGER
                 )
                 """)
+                db.execute("CREATE INDEX IF NOT EXISTS idx_queue_url ON queue(url)")
+                db.execute("CREATE INDEX IF NOT EXISTS idx_visited_urls_url ON visited_urls(url)")
                 db.commit()
 
         else:
