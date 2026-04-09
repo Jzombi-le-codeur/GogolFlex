@@ -243,6 +243,9 @@ class RobotsTxt:
         self.authorizations = {"visit": True, "index": True, "follow": True}
         self.crawl_delay = 1
 
+        # Create RobotsTXT folder
+        os.makedirs("RobotsTXT") if not os.path.exists("RobotsTXT") else None
+
     def __get_robots_txt_file(self, url_base: urllib.parse.ParseResult):
         s = time.time()
         robots_txt_filepath = pathlib.PurePath("RobotsTXT", f"{url_base.netloc}.txt")
