@@ -12,44 +12,41 @@ class Parser:
         self.page_code = BeautifulSoup()
 
     def init(self):
-        db = sqlite3.connect("parse.db", timeout=self.db_timeout)
-        db.execute("""
-        CREATE TABLE IF NOT EXISTS page_informations (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            url TEXT,
-            page_filename TEXT,
-            title TEXT,
-            indexed INTEGER
-        )
-        """)
-        db.execute("CREATE INDEX IF NOT EXISTS idx_page_informations_url ON page_informations(url)")
-        db.close()
+        with sqlite3.connect("parse.db", timeout=self.db_timeout) as db:
+            db.execute("""
+            CREATE TABLE IF NOT EXISTS page_informations (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                url TEXT,
+                page_filename TEXT,
+                title TEXT,
+                indexed INTEGER
+            )
+            """)
+            db.execute("CREATE INDEX IF NOT EXISTS idx_page_informations_url ON page_informations(url)")
 
     def __get_crawl_results(self):
         # Get visited_urls datas
-        db = sqlite3.connect("crawl.db", timeout=self.db_timeout)
-        db_cursor = db.cursor()
-        pages_informations = list()
-        while not self.pages_informations:
-            db_cursor.execute("SELECT id, url, indexation, page_filename FROM visited_urls WHERE parsed=0 ORDER BY id LIMIT 10")
-            pages_informations = db_cursor.fetchall()
+        with sqlite3.connect("crawl.db", timeout=self.db_timeout) as db:
+            db_cursor = db.cursor()
+            pages_informations = list()
+            while not self.pages_informations:
+                db_cursor.execute("SELECT id, url, indexation, page_filename FROM visited_urls WHERE parsed=0 ORDER BY id LIMIT 10")
+                pages_informations = db_cursor.fetchall()
 
-            for page_infos in pages_informations:
-                # Get informations
-                if bool(page_infos[2]):
-                    page_informations = {}
-                    page_informations["id"] = page_infos[0]
-                    page_informations["url"] = page_infos[1]
-                    page_informations["page_filename"] = page_infos[3]
-                    self.pages_informations.append(page_informations)
+                for page_infos in pages_informations:
+                    # Get informations
+                    if bool(page_infos[2]):
+                        page_informations = {}
+                        page_informations["id"] = page_infos[0]
+                        page_informations["url"] = page_infos[1]
+                        page_informations["page_filename"] = page_infos[3]
+                        self.pages_informations.append(page_informations)
 
-                else:
-                    db.execute("UPDATE visited_urls SET parsed=1 WHERE id=?", (page_infos[0],))
+                    else:
+                        db.execute("UPDATE visited_urls SET parsed=1 WHERE id=?", (page_infos[0],))
 
-            if not pages_informations:
-                time.sleep(1)
-
-        db.close()
+                if not pages_informations:
+                    time.sleep(1)
 
     def __get_page_code(self):
         # Get page code
@@ -102,31 +99,29 @@ class Parser:
         self.page_informations["title"] = title.strip()
 
     def __is_page_in_db(self):
-        db = sqlite3.connect("parse.db", timeout=self.db_timeout)
-        db_cursor = db.cursor()
-        db_cursor.execute("SELECT url FROM page_informations WHERE url = ?", (self.page_informations["url"],))
-        res = db_cursor.fetchone()
-        print(res)
+        with sqlite3.connect("parse.db", timeout=self.db_timeout) as db:
+            db_cursor = db.cursor()
+            db_cursor.execute("SELECT url FROM page_informations WHERE url = ?", (self.page_informations["url"],))
+            res = db_cursor.fetchone()
+            print(res)
         return True if res else False
 
     def __save_datas(self):
         # Mark page as parsed
-        db = sqlite3.connect("crawl.db", timeout=self.db_timeout)
-        db.execute("UPDATE visited_urls SET parsed=1 WHERE id=?", (self.page_informations["id"],))
-        db.commit()
-        db.close()
+        with sqlite3.connect("crawl.db", timeout=self.db_timeout) as db:
+            db.execute("UPDATE visited_urls SET parsed=1 WHERE id=?", (self.page_informations["id"],))
+            db.commit()
 
         # Save informations
         if not self.__is_page_in_db():
-            db = sqlite3.connect("parse.db", timeout=self.db_timeout)
-            db.execute("INSERT INTO page_informations (url, page_filename, title, indexed) VALUES (?, ?, ?, ?)", (
-                self.page_informations["url"],
-                self.page_informations["page_filename"],
-                self.page_informations["title"],
-                0,
-            ))
-            db.commit()
-            db.close()
+            with sqlite3.connect("parse.db", timeout=self.db_timeout) as db:
+                db.execute("INSERT INTO page_informations (url, page_filename, title, indexed) VALUES (?, ?, ?, ?)", (
+                    self.page_informations["url"],
+                    self.page_informations["page_filename"],
+                    self.page_informations["title"],
+                    0,
+                ))
+                db.commit()
 
         else:
             print("DEJA DEDANS")
