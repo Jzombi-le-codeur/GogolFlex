@@ -119,13 +119,20 @@ class Crawler:
         # Parse page code
         self.page = BeautifulSoup(self.response.text, features="html.parser")
 
-    def __check_if_page_has_been_visited(self, url, db_cursor):
-        db_cursor.execute("SELECT 1 FROM visited_urls WHERE url = (?)", (url,))
-        return True if db_cursor.fetchone() else False
+    def __add_urls_in_queue(self, urls, db_cursor):
+        placeholders = ','.join(['?'] * len(urls))
 
-    def __check_if_page_is_in_queue(self, url, db_cursor):
-        db_cursor.execute("SELECT 1 FROM queue WHERE url = (?)", (url,))
-        return True if db_cursor.fetchone() else False
+        # Get visited urls
+        db_cursor.execute(f"SELECT url FROM visited_urls WHERE url IN ({placeholders})", urls)
+        visited_urls = {row[0] for row in db_cursor.fetchall()}
+
+        # Get urls already in queue
+        db_cursor.execute(f"SELECT url FROM queue WHERE url IN ({placeholders})", urls)
+        urls_in_queue = {row[0] for row in db_cursor.fetchall()}
+
+        # Insert urls in database
+        urls = set(urls) - visited_urls - urls_in_queue
+        db_cursor.executemany("INSERT INTO queue (url) VALUES (?)", [(url,) for url in urls])
 
     def __get_links(self):
         # Get all a tags
@@ -135,6 +142,7 @@ class Crawler:
         with sqlite3.connect("crawl.db", timeout=self.db_timeout) as db:
             db_cursor = db.cursor()
 
+            urls = []
             # Get & format all links
             for a in links:
                 # Check if there's href in a
@@ -162,9 +170,11 @@ class Crawler:
                     if url:
                         parsed_url = urlparse(url)
                         url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}".rstrip('/')
-                        if not self.__check_if_page_has_been_visited(url=url, db_cursor=db_cursor) and not self.__check_if_page_is_in_queue(url=url, db_cursor=db_cursor):
-                            # Add url in database queue
-                            db_cursor.execute(f"INSERT INTO queue (url) VALUES (?)", (url,))
+                        urls.append(url)
+
+
+            # Add urls in database queue
+            self.__add_urls_in_queue(urls=urls, db_cursor=db_cursor)
 
             # Add URLs in queue & close connection
             db.commit()
