@@ -33,6 +33,12 @@ class Indexer:
             documents_number INTEGER
         )
         """)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_inverted_index_word ON inverted_index(word)")
+        db.commit()
+        db.close()
+
+        db = sqlite3.connect("parse.db", timeout=self.db_timeout)
+        db.execute("CREATE INDEX IF NOT EXISTS idx_page_informations_indexed ON page_informations(indexed)")
         db.commit()
         db.close()
 
