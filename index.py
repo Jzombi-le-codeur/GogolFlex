@@ -214,4 +214,4 @@ class Indexer:
 
 if __name__ == "__main__":
     indexer = Indexer()
-    indexer.calculate_tf_idf()
+    indexer.run()

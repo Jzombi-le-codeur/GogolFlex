@@ -1,4 +1,5 @@
 import time
+import urllib.parse
 from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
 import requests
@@ -242,15 +243,30 @@ class RobotsTxt:
         self.authorizations = {"visit": True, "index": True, "follow": True}
         self.crawl_delay = 1
 
+    def __get_robots_txt_file(self, url_base: urllib.parse.ParseResult):
+        s = time.time()
+        robots_txt_filepath = pathlib.PurePath("RobotsTXT", f"{url_base.netloc}.txt")
+        if os.path.exists(robots_txt_filepath):
+            with open(robots_txt_filepath, "r", encoding="utf-8") as robots_txt_file:
+                robots_txt_file_content = robots_txt_file.read()
+
+        else:
+            robots_txt_url = f"{url_base.scheme}://{url_base.netloc}/robots.txt"
+            robots_txt_file_content = requests.get(robots_txt_url, headers=self.headers).text
+            with open(robots_txt_filepath, "w", encoding="utf-8") as robots_txt_file:
+                robots_txt_file.write(robots_txt_file_content)
+
+        print("TIME :", time.time()-s)
+        return robots_txt_file_content
+
     def can_visit(self, url: str):
         # Get robots.txt url
         url_base = urlparse(url)
-        robots_txt_url = f"{url_base.scheme}://{url_base.netloc}/robots.txt"
 
         # Get robots.txt content
-        print(robots_txt_url)
         try:
-            robots_txt_file = requests.get(robots_txt_url, headers=self.headers).text
+            # robots_txt_file =
+            robots_txt_file = self.__get_robots_txt_file(url_base=url_base)
             rfp = RobotFileParser()
             rfp.parse(robots_txt_file.splitlines())
 
