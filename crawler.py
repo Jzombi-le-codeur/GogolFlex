@@ -43,62 +43,60 @@ class Crawler:
         )
 
     def __check_if_db_is_empty(self):
-        db_cursor = self.db.cursor()
-        db_cursor.execute("SELECT id FROM queue LIMIT 1")
-        # Check if db is empty
-        if not db_cursor.fetchone():
-            return True
+        with self.db.cursor() as db_cursor:
+            db_cursor.execute("SELECT id FROM queue LIMIT 1")
+            # Check if db is empty
+            if not db_cursor.fetchone():
+                return True
 
-        else:
-            return False
+            else:
+                return False
 
     def init(self):
         # Create database
-        db_cursor = self.db.cursor()
-        db_cursor.execute("""
-        CREATE TABLE IF NOT EXISTS queue (
-            id SERIAL PRIMARY KEY,
-            url TEXT
-        )
-        """)
-        db_cursor.execute("""
-        CREATE TABLE IF NOT EXISTS visited_urls (
-            id SERIAL PRIMARY KEY,
-            url TEXT,
-            indexation INTEGER,
-            page_filename TEXT,
-            parsed INTEGER
-        )
-        """)
-        db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_queue_url ON queue(url)")
-        db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_visited_urls_url ON visited_urls(url)")
-        self.db.commit()
+        with self.db.cursor() as db_cursor:
+            db_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS queue (
+                id SERIAL PRIMARY KEY,
+                url TEXT
+            )
+            """)
+            db_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS visited_urls (
+                id SERIAL PRIMARY KEY,
+                url TEXT,
+                indexation INTEGER,
+                page_filename TEXT,
+                parsed INTEGER
+            )
+            """)
+            db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_queue_url ON queue(url)")
+            db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_visited_urls_url ON visited_urls(url)")
+            self.db.commit()
 
-        # Load queue if there are urls in db's queue
-        if not self.__check_if_db_is_empty():
-            self.queue.pop()
-            self.__load_queue()
+            # Load queue if there are urls in db's queue
+            if not self.__check_if_db_is_empty():
+                self.queue.clear()
+                self.__load_queue()
 
     def __load_queue(self):
         print("cacaquipue")
-        # Connect to database
-        db_cursor = self.db.cursor()
+        with self.db.cursor() as db_cursor:
+            # Get queue
+            queue = list()
+            while not queue:
+                db_cursor.execute("SELECT id, url FROM queue ORDER BY id LIMIT 10")
+                queue = db_cursor.fetchmany(10)
+                if not queue:
+                    time.sleep(1)
 
-        # Get queue
-        queue = list()
-        while not queue:
-            db_cursor.execute("SELECT id, url FROM queue ORDER BY id LIMIT 10")
-            queue = db_cursor.fetchmany(10)
-            if not queue:
-                time.sleep(1)
+            print(queue)
+            self.queue = [u[1] for u in queue]
+            ids = [u[0] for u in queue]
 
-        print(queue)
-        self.queue = [u[1] for u in queue]
-        ids = [u[0] for u in queue]
-
-        # Delete these URLs from queue db
-        db_cursor.execute(f"DELETE FROM queue WHERE id IN ({','.join(['%s'] * len(ids))})", ids)
-        self.db.commit()
+            # Delete these URLs from queue db
+            db_cursor.execute(f"DELETE FROM queue WHERE id IN ({','.join(['%s'] * len(ids))})", ids)
+            self.db.commit()
 
     def __request(self):
         try:
@@ -110,15 +108,15 @@ class Crawler:
     def __mark_url_as_visited(self):
         # Add URL in visited_urls
         print("Page filepath :", self.page_filepath)
-        db_cursor = self.db.cursor()
-        db_cursor.execute("INSERT INTO visited_urls (url, indexation, page_filename, parsed) VALUES (%s, %s, %s, %s)", (
-            self.url,
-            int(self.robots_txt.authorizations["index"]),
-            self.page_filepath.name,
-            0,
-        ))
-        self.db.commit()
-        print("PROUTTTT NUCLEAIRE")
+        with self.db.cursor() as db_cursor:
+            db_cursor.execute("INSERT INTO visited_urls (url, indexation, page_filename, parsed) VALUES (%s, %s, %s, %s)", (
+                self.url,
+                int(self.robots_txt.authorizations["index"]),
+                self.page_filepath.name,
+                0,
+            ))
+            self.db.commit()
+            print("PROUTTTT NUCLEAIRE")
 
     def __get_page(self):
         # Parse page code
@@ -142,9 +140,6 @@ class Crawler:
     def __get_links(self):
         # Get all a tags
         links = self.page.find_all("a")
-
-        # Connect to database
-        db_cursor = self.db.cursor()
 
         urls = []
         # Get & format all links
@@ -177,11 +172,12 @@ class Crawler:
                     urls.append(url)
 
 
-        # Add urls in database queue
-        self.__add_urls_in_queue(urls=urls, db_cursor=db_cursor)
+        with self.db.cursor() as db_cursor:
+            # Add urls in database queue
+            self.__add_urls_in_queue(urls=urls, db_cursor=db_cursor)
 
-        # Add URLs in queue & close connection
-        self.db.commit()
+            # Add URLs in queue & close connection
+            self.db.commit()
 
     def __save_page(self):
         print("caca")
