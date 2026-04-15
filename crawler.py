@@ -10,7 +10,8 @@ from dateutil import parser as time_parser
 import hashlib
 import pathlib
 import os
-import sqlite3
+import psycopg2
+from dotenv import load_dotenv
 
 
 class Crawler:
@@ -20,7 +21,6 @@ class Crawler:
         self.headers = {
             "User-Agent": self.name
         }
-        self.db_timeout = 30
 
         # URLs
         self.queue = ["https://fr.wikipedia.org/wiki/Wikip%C3%A9dia:Accueil_principal", "https://nicot3m.pages-perso.free.fr/", "https://fr.wikihow.com/Accueil"]
@@ -32,67 +32,73 @@ class Crawler:
         # Robots.txt
         self.robots_txt = RobotsTxt(crawler=self)
 
-    def __check_if_db_is_empty(self):
-        with sqlite3.connect("crawl.db", timeout=self.db_timeout) as db:
-            db_cursor = db.cursor()
-            db_cursor.execute("SELECT id FROM queue LIMIT 1")
-            # Check if db is empty
-            if not db_cursor.fetchone():
-                return True
+        # DB connection
+        load_dotenv()
+        self.db = psycopg2.connect(
+            dbname="GogolFlexDB",
+            user="postgres",
+            password=os.getenv("PASSWORD"),
+            host="localhost",
+            port=5432
+        )
 
-            else:
-                return False
+    def __check_if_db_is_empty(self):
+        db_cursor = self.db.cursor()
+        db_cursor.execute("SELECT id FROM queue LIMIT 1")
+        # Check if db is empty
+        if not db_cursor.fetchone():
+            return True
+
+        else:
+            return False
 
     def init(self):
         # Create database
-        if not os.path.exists("crawl.db"):
-            with sqlite3.connect("crawl.db", timeout=self.db_timeout) as db:
-                db.execute("""
-                CREATE TABLE IF NOT EXISTS queue (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    url TEXT
-                )
-                """)
-                db.execute("""
-                CREATE TABLE IF NOT EXISTS visited_urls (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    url TEXT,
-                    indexation INTEGER,
-                    page_filename TEXT,
-                    parsed INTEGER
-                )
-                """)
-                db.execute("CREATE INDEX IF NOT EXISTS idx_queue_url ON queue(url)")
-                db.execute("CREATE INDEX IF NOT EXISTS idx_visited_urls_url ON visited_urls(url)")
-                db.commit()
+        db_cursor = self.db.cursor()
+        db_cursor.execute("""
+        CREATE TABLE IF NOT EXISTS queue (
+            id SERIAL PRIMARY KEY,
+            url TEXT
+        )
+        """)
+        db_cursor.execute("""
+        CREATE TABLE IF NOT EXISTS visited_urls (
+            id SERIAL PRIMARY KEY,
+            url TEXT,
+            indexation INTEGER,
+            page_filename TEXT,
+            parsed INTEGER
+        )
+        """)
+        db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_queue_url ON queue(url)")
+        db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_visited_urls_url ON visited_urls(url)")
+        self.db.commit()
 
-        else:
-            # Load queue if there are urls in db's queue
-            if not self.__check_if_db_is_empty():
-                self.queue.pop()
-                self.__load_queue()
+        # Load queue if there are urls in db's queue
+        if not self.__check_if_db_is_empty():
+            self.queue.pop()
+            self.__load_queue()
 
     def __load_queue(self):
         print("cacaquipue")
         # Connect to database
-        with sqlite3.connect("crawl.db", timeout=self.db_timeout) as db:
-            db_cursor = db.cursor()
+        db_cursor = self.db.cursor()
 
-            # Get queue
-            queue = list()
-            while not queue:
-                db_cursor.execute("SELECT id, url FROM queue ORDER BY id LIMIT 10")
-                queue = db_cursor.fetchmany(10)
-                if not queue:
-                    time.sleep(1)
+        # Get queue
+        queue = list()
+        while not queue:
+            db_cursor.execute("SELECT id, url FROM queue ORDER BY id LIMIT 10")
+            queue = db_cursor.fetchmany(10)
+            if not queue:
+                time.sleep(1)
 
-            print(queue)
-            self.queue = [u[1] for u in queue]
-            ids = [u[0] for u in queue]
+        print(queue)
+        self.queue = [u[1] for u in queue]
+        ids = [u[0] for u in queue]
 
-            # Delete these URLs from queue db
-            db_cursor.execute(f"DELETE FROM queue WHERE id IN ({','.join('?' for _ in ids)})", ids)
-            db.commit()
+        # Delete these URLs from queue db
+        db_cursor.execute(f"DELETE FROM queue WHERE id IN ({','.join(['%s'] * len(ids))})", ids)
+        self.db.commit()
 
     def __request(self):
         try:
@@ -102,25 +108,24 @@ class Crawler:
             self.response = None
 
     def __mark_url_as_visited(self):
-        # Connect to database
-        with sqlite3.connect("crawl.db", timeout=self.db_timeout) as db:
-            # Add URL in visited_urls
-            print("Page filepath :", self.page_filepath)
-            db.execute("INSERT INTO visited_urls (url, indexation, page_filename, parsed) VALUES (?, ?, ?, ?)", (
-                self.url,
-                int(self.robots_txt.authorizations["index"]),
-                self.page_filepath.name,
-                0,
-            ))
-            db.commit()
-            print("PROUTTTT NUCLEAIRE")
+        # Add URL in visited_urls
+        print("Page filepath :", self.page_filepath)
+        db_cursor = self.db.cursor()
+        db_cursor.execute("INSERT INTO visited_urls (url, indexation, page_filename, parsed) VALUES (%s, %s, %s, %s)", (
+            self.url,
+            int(self.robots_txt.authorizations["index"]),
+            self.page_filepath.name,
+            0,
+        ))
+        self.db.commit()
+        print("PROUTTTT NUCLEAIRE")
 
     def __get_page(self):
         # Parse page code
         self.page = BeautifulSoup(self.response.text, features="html.parser")
 
     def __add_urls_in_queue(self, urls, db_cursor):
-        placeholders = ','.join(['?'] * len(urls))
+        placeholders = ','.join(['%s'] * len(urls))
 
         # Get visited urls
         db_cursor.execute(f"SELECT url FROM visited_urls WHERE url IN ({placeholders})", urls)
@@ -132,52 +137,51 @@ class Crawler:
 
         # Insert urls in database
         urls = set(urls) - visited_urls - urls_in_queue
-        db_cursor.executemany("INSERT INTO queue (url) VALUES (?)", [(url,) for url in urls])
+        db_cursor.executemany("INSERT INTO queue (url) VALUES (%s)", [(url,) for url in urls])
 
     def __get_links(self):
         # Get all a tags
         links = self.page.find_all("a")
 
         # Connect to database
-        with sqlite3.connect("crawl.db", timeout=self.db_timeout) as db:
-            db_cursor = db.cursor()
+        db_cursor = self.db.cursor()
 
-            urls = []
-            # Get & format all links
-            for a in links:
-                # Check if there's href in a
-                if a.has_attr("href"):
-                    link = a["href"]  # Get link
+        urls = []
+        # Get & format all links
+        for a in links:
+            # Check if there's href in a
+            if a.has_attr("href"):
+                link = a["href"]  # Get link
 
-                    # Create url based on relative link
-                    if link.startswith("/") and not link.startswith("//"):
-                        parsed_url = urlparse(self.url)
-                        url = f"{parsed_url.scheme}://{parsed_url.netloc}{link}"
+                # Create url based on relative link
+                if link.startswith("/") and not link.startswith("//"):
+                    parsed_url = urlparse(self.url)
+                    url = f"{parsed_url.scheme}://{parsed_url.netloc}{link}"
 
-                    # Complete link with HTTP or HTTPS
-                    elif link.startswith("//"):
-                        parsed_url = urlparse(self.url)
-                        url = f"{parsed_url.scheme}{link}"
+                # Complete link with HTTP or HTTPS
+                elif link.startswith("//"):
+                    parsed_url = urlparse(self.url)
+                    url = f"{parsed_url.scheme}{link}"
 
-                    # Get URL
-                    elif link.startswith("http"):
-                        url = link
+                # Get URL
+                elif link.startswith("http"):
+                    url = link
 
-                    else:
-                        url = None
+                else:
+                    url = None
 
-                    # Add url if url in queue is not in queue or has never been visited
-                    if url:
-                        parsed_url = urlparse(url)
-                        url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}".rstrip('/')
-                        urls.append(url)
+                # Add url if url in queue is not in queue or has never been visited
+                if url:
+                    parsed_url = urlparse(url)
+                    url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}".rstrip('/')
+                    urls.append(url)
 
 
-            # Add urls in database queue
-            self.__add_urls_in_queue(urls=urls, db_cursor=db_cursor)
+        # Add urls in database queue
+        self.__add_urls_in_queue(urls=urls, db_cursor=db_cursor)
 
-            # Add URLs in queue & close connection
-            db.commit()
+        # Add URLs in queue & close connection
+        self.db.commit()
 
     def __save_page(self):
         print("caca")
