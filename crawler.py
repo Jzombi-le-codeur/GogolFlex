@@ -12,6 +12,7 @@ import pathlib
 import os
 import psycopg
 from dotenv import load_dotenv
+from datetime import datetime, timezone
 
 
 class Crawler:
@@ -26,7 +27,7 @@ class Crawler:
         self.queue = ["https://fr.wikipedia.org/wiki/Wikip%C3%A9dia:Accueil_principal", "https://nicot3m.pages-perso.free.fr/", "https://fr.wikihow.com/Accueil"]
         self.url = self.queue[0]
         self.response = requests.Response()
-        self.page = BeautifulSoup()
+        self.page = BeautifulSoup("", "html.parser")
         self.page_filepath = pathlib.PurePath()
 
         # Robots.txt
@@ -40,7 +41,6 @@ class Crawler:
             password=os.getenv("PASSWORD"),
             host="localhost",
             port=5432
-
         )
 
     def __check_if_db_is_empty(self):
@@ -59,7 +59,8 @@ class Crawler:
             db_cursor.execute("""
             CREATE TABLE IF NOT EXISTS queue (
                 id SERIAL PRIMARY KEY,
-                url TEXT
+                url TEXT,
+                domain TEXT
             )
             """)
             db_cursor.execute("""
@@ -71,8 +72,17 @@ class Crawler:
                 parsed INTEGER
             )
             """)
+            db_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS visited_domains (
+                id SERIAL PRIMARY KEY,
+                url TEXT UNIQUE,
+                crawl_delay REAL,
+                last_visit TIMESTAMPTZ
+            )
+            """)
             db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_queue_url ON queue(url)")
             db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_visited_urls_url ON visited_urls(url)")
+            db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_visited_domains_url ON visited_domains(url)")
             self.db.commit()
 
             # Load queue if there are urls in db's queue
@@ -86,10 +96,21 @@ class Crawler:
             # Get queue
             queue = list()
             while not queue:
-                db_cursor.execute("SELECT id, url FROM queue ORDER BY id LIMIT 10")
-                queue = db_cursor.fetchmany(10)
+                # Get pages of not visited domains
+                db_cursor.execute("""
+                SELECT DISTINCT ON (q.domain) q.id, q.url
+                FROM queue q
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM visited_domains vd
+                    WHERE vd.url = q.domain
+                    AND vd.last_visit + (vd.crawl_delay * INTERVAL '1 second') > NOW()
+                )
+                ORDER BY q.domain, q.id
+                LIMIT 10
+                """)
+                queue = db_cursor.fetchall()
                 if not queue:
-                    time.sleep(1)
+                    time.sleep(0.5)
 
             print(queue)
             self.queue = [u[1] for u in queue]
@@ -101,7 +122,7 @@ class Crawler:
 
     def __request(self):
         try:
-            self.response = requests.get(self.url, headers=self.headers)
+            self.response = requests.get(self.url, headers=self.headers, timeout=20)
 
         except requests.exceptions.RequestException:
             self.response = None
@@ -116,6 +137,23 @@ class Crawler:
                 self.page_filepath.name,
                 0,
             ))
+
+            # Set this site in visited domains
+            timestamp = datetime.now(timezone.utc)
+            db_cursor.execute(
+                """
+                INSERT INTO visited_domains (url, crawl_delay, last_visit)
+                VALUES (%s, %s, %s)
+                ON CONFLICT (url) DO UPDATE
+                SET last_visit = EXCLUDED.last_visit, crawl_delay = EXCLUDED.crawl_delay
+                """,
+                (
+                    urlparse(self.url).netloc,
+                    self.robots_txt.crawl_delay,
+                    timestamp,
+                )
+            )
+
             self.db.commit()
             print("PROUTTTT NUCLEAIRE")
 
@@ -124,19 +162,25 @@ class Crawler:
         self.page = BeautifulSoup(self.response.text, features="html.parser")
 
     def __add_urls_in_queue(self, urls, db_cursor):
+        # Stop function if there are 0 url
+        if not urls:
+            return
+
+        raw_urls = [u[0] for u in urls]
         placeholders = ','.join(['%s'] * len(urls))
 
         # Get visited urls
-        db_cursor.execute(f"SELECT url FROM visited_urls WHERE url IN ({placeholders})", urls)
+        db_cursor.execute(f"SELECT url FROM visited_urls WHERE url IN ({placeholders})", raw_urls)
         visited_urls = {row[0] for row in db_cursor.fetchall()}
 
         # Get urls already in queue
-        db_cursor.execute(f"SELECT url FROM queue WHERE url IN ({placeholders})", urls)
+        db_cursor.execute(f"SELECT url FROM queue WHERE url IN ({placeholders})", raw_urls)
         urls_in_queue = {row[0] for row in db_cursor.fetchall()}
 
         # Insert urls in database
-        urls = set(urls) - visited_urls - urls_in_queue
-        db_cursor.executemany("INSERT INTO queue (url) VALUES (%s)", [(url,) for url in urls])
+        # urls = set(urls) - visited_urls - urls_in_queue
+        urls = {(url, domain,) for url, domain in urls if not url in  visited_urls and not url in urls_in_queue}
+        db_cursor.executemany("INSERT INTO queue (url, domain) VALUES (%s, %s)", [(url, domain,) for url, domain in urls])
 
     def __get_links(self):
         # Get all a tags
@@ -170,7 +214,8 @@ class Crawler:
                 if url:
                     parsed_url = urlparse(url)
                     url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}".rstrip('/')
-                    urls.append(url)
+                    domain = parsed_url.netloc
+                    urls.append((url, domain,))
 
 
         with self.db.cursor() as db_cursor:
@@ -220,14 +265,16 @@ class Crawler:
 
                 # Save datas
                 self.__save_page()  # Save page
-                self.__mark_url_as_visited()  # Save datas
 
                 # Get page's links
                 if self.robots_txt.authorizations["follow"]:
                     self.__get_links()
 
+            self.__mark_url_as_visited()  # Save datas
+
         print("----------------------------")
-        time.sleep(self.robots_txt.crawl_delay)  # Wait not to DDOS host
+        # time.sleep(self.robots_txt.crawl_delay)  # Wait not to DDOS host
+        time.sleep(0.1)
 
     def run(self, i: int = 0):
         try:
@@ -237,7 +284,10 @@ class Crawler:
             if i == 0:
                 running = True
                 while running:
+                    a = time.time()
                     self.__run()
+                    print("TEMPS :", time.time() - a)
+                    print("________________________________________")
 
             else:
                 for _ in range(i):
@@ -245,7 +295,6 @@ class Crawler:
 
         finally:
             self.db.close()
-
 
 
 class RobotsTxt:
