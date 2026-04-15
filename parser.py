@@ -1,7 +1,9 @@
 import time
 from bs4 import BeautifulSoup
 import pathlib
-import sqlite3
+import psycopg2
+import os
+from dotenv import load_dotenv
 
 
 class Parser:
@@ -10,6 +12,15 @@ class Parser:
         self.pages_informations = []  # {"id": int(), "url": str(), "page_filename": str(), "title": str()}
         self.page_informations = {"id": int(), "url": str(), "page_filename": str(), "title": str()}
         self.page_code = BeautifulSoup()
+
+        load_dotenv()
+        self.db = psycopg2.connect(
+            dbname="GogolFlexDB",
+            user="postgres",
+            password=os.getenv("PASSWORD"),
+            host="localhost",
+            port=5432
+        )
 
     def init(self):
         with sqlite3.connect("parse.db", timeout=self.db_timeout) as db:
