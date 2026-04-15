@@ -213,7 +213,15 @@ class Crawler:
                 # Add url if url in queue is not in queue or has never been visited
                 if url:
                     parsed_url = urlparse(url)
-                    url = f"{parsed_url.scheme}://{parsed_url.netloc}{parsed_url.path}".rstrip('/')
+                    url_path = parsed_url.path
+
+                    # Check if url has an allowed extension
+                    allowed_ext = {".htm", ".html", ".php", ".asp", ".aspx", ".xhtml"}
+                    if "." in url_path:
+                        if pathlib.PurePath(url_path).suffix.lower() not in allowed_ext:
+                            return
+
+                    url = f"{parsed_url.scheme}://{parsed_url.netloc}{url_path}".rstrip('/')
                     domain = parsed_url.netloc
                     urls.append((url, domain,))
 
