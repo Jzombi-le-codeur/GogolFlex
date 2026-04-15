@@ -1,7 +1,7 @@
 import time
 from bs4 import BeautifulSoup
 import pathlib
-import psycopg2
+import psycopg
 import os
 from dotenv import load_dotenv
 
@@ -14,7 +14,7 @@ class Parser:
         self.page_code = BeautifulSoup()
 
         load_dotenv()
-        self.db = psycopg2.connect(
+        self.db = psycopg.connect(
             dbname="GogolFlexDB",
             user="postgres",
             password=os.getenv("PASSWORD"),
@@ -23,22 +23,21 @@ class Parser:
         )
 
     def init(self):
-        with sqlite3.connect("parse.db", timeout=self.db_timeout) as db:
-            db.execute("""
+        with self.db.cursor() as db_cursor:
+            db_cursor.execute("""
             CREATE TABLE IF NOT EXISTS page_informations (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 url TEXT,
                 page_filename TEXT,
                 title TEXT,
                 indexed INTEGER
             )
             """)
-            db.execute("CREATE INDEX IF NOT EXISTS idx_page_informations_url ON page_informations(url)")
+            db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_informations_url ON page_informations(url)")
 
     def __get_crawl_results(self):
         # Get visited_urls datas
-        with sqlite3.connect("crawl.db", timeout=self.db_timeout) as db:
-            db_cursor = db.cursor()
+        with self.db.cursor() as db_cursor:
             pages_informations = list()
             while not self.pages_informations:
                 db_cursor.execute("SELECT id, url, indexation, page_filename FROM visited_urls WHERE parsed=0 ORDER BY id LIMIT 10")
@@ -54,7 +53,7 @@ class Parser:
                         self.pages_informations.append(page_informations)
 
                     else:
-                        db.execute("UPDATE visited_urls SET parsed=1 WHERE id=?", (page_infos[0],))
+                        db_cursor.execute("UPDATE visited_urls SET parsed=1 WHERE id=%s", (page_infos[0],))
 
                 if not pages_informations:
                     time.sleep(1)
@@ -110,29 +109,28 @@ class Parser:
         self.page_informations["title"] = title.strip()
 
     def __is_page_in_db(self):
-        with sqlite3.connect("parse.db", timeout=self.db_timeout) as db:
-            db_cursor = db.cursor()
-            db_cursor.execute("SELECT url FROM page_informations WHERE url = ?", (self.page_informations["url"],))
+        with self.db.cursor() as db_cursor:
+            db_cursor.execute("SELECT url FROM page_informations WHERE url = %s", (self.page_informations["url"],))
             res = db_cursor.fetchone()
             print(res)
         return True if res else False
 
     def __save_datas(self):
         # Mark page as parsed
-        with sqlite3.connect("crawl.db", timeout=self.db_timeout) as db:
-            db.execute("UPDATE visited_urls SET parsed=1 WHERE id=?", (self.page_informations["id"],))
-            db.commit()
+        with self.db.cursor() as db_cursor:
+            db_cursor.execute("UPDATE visited_urls SET parsed=1 WHERE id=%s", (self.page_informations["id"],))
+            self.db.commit()
 
         # Save informations
         if not self.__is_page_in_db():
-            with sqlite3.connect("parse.db", timeout=self.db_timeout) as db:
-                db.execute("INSERT INTO page_informations (url, page_filename, title, indexed) VALUES (?, ?, ?, ?)", (
+            with self.db.cursor() as db_cursor:
+                db_cursor.execute("INSERT INTO page_informations (url, page_filename, title, indexed) VALUES (%s, %s, %s, %s)", (
                     self.page_informations["url"],
                     self.page_informations["page_filename"],
                     self.page_informations["title"],
                     0,
                 ))
-                db.commit()
+                self.db.commit()
 
         else:
             print("DEJA DEDANS")
@@ -157,17 +155,21 @@ class Parser:
         self.__save_datas()
 
     def run(self, i: int = 0):
-        # Initialize database
-        self.init()
+        try:
+            # Initialize database
+            self.init()
 
-        if i == 0:
-            running = True
-            while running:
-                self.__run()
+            if i == 0:
+                running = True
+                while running:
+                    self.__run()
 
-        else:
-            for _ in range(i):
-                self.__run()
+            else:
+                for _ in range(i):
+                    self.__run()
+
+        finally:
+            self.db.close()
 
 
 if __name__ == "__main__":

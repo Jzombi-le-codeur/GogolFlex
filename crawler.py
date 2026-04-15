@@ -230,17 +230,21 @@ class Crawler:
         time.sleep(self.robots_txt.crawl_delay)  # Wait not to DDOS host
 
     def run(self, i: int = 0):
-        # Initialization
-        self.init()
+        try:
+            # Initialization
+            self.init()
 
-        if i == 0:
-            running = True
-            while running:
-                self.__run()
+            if i == 0:
+                running = True
+                while running:
+                    self.__run()
 
-        else:
-            for _ in range(i):
-                self.__run()
+            else:
+                for _ in range(i):
+                    self.__run()
+
+        finally:
+            self.db.close()
 
 
 

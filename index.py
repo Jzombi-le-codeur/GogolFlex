@@ -1,9 +1,11 @@
 import pathlib
-import sqlite3
+import psycopg
 import time
 from bs4 import BeautifulSoup
 import re
 import math
+from dotenv import load_dotenv
+import os
 
 
 class Indexer:
@@ -14,11 +16,21 @@ class Indexer:
         self.page_text = str()
         self.frequencies = dict()
 
+        load_dotenv(encoding="utf-8")
+        self.db = psycopg.connect(
+            dbname="GogolFlexDB",
+            user="postgres",
+            password=os.getenv("PASSWORD"),
+            host="localhost",
+            port=5432
+
+        )
+
     def init(self):
-        with sqlite3.connect("index.db", timeout=self.db_timeout) as db:
-            db.execute("""
+        with self.db.cursor() as db_cursor:
+            db_cursor.execute("""
             CREATE TABLE IF NOT EXISTS inverted_index (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                id SERIAL PRIMARY KEY,
                 word TEXT,
                 page_id INTEGER,
                 url TEXT,
@@ -27,23 +39,20 @@ class Indexer:
                 tf_idf REAL
             )
             """)
-            db.execute("""
+            db_cursor.execute("""
             CREATE TABLE IF NOT EXISTS term_documents (
                 word TEXT PRIMARY KEY,
                 documents_number INTEGER
             )
             """)
-            db.execute("CREATE INDEX IF NOT EXISTS idx_inverted_index_word ON inverted_index(word)")
-            db.commit()
-
-        with sqlite3.connect("parse.db", timeout=self.db_timeout) as db:
-            db.execute("CREATE INDEX IF NOT EXISTS idx_page_informations_indexed ON page_informations(indexed)")
-            db.commit()
+            db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_inverted_index_word ON inverted_index(word)")
+            db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_informations_indexed ON page_informations(indexed)")
+            
+            self.db.commit()
 
     def __get_pages_informations(self):
         # Get datas
-        with sqlite3.connect("parse.db", timeout=self.db_timeout) as db:
-            db_cursor = db.cursor()
+        with self.db.cursor() as db_cursor:
             pages_informations = list()
             i = 0
             while not pages_informations and i < 400:
@@ -85,11 +94,11 @@ class Indexer:
                 self.frequencies[token] += 1
 
     def __save_page_informations(self):
-        with sqlite3.connect("index.db", timeout=self.db_timeout) as db:
+        with self.db.cursor() as db_cursor:
             total_terms = sum(self.frequencies.values())
             for token in self.frequencies.keys():
                 # Save page's TF
-                db.execute("INSERT INTO inverted_index (word, page_id, url, title, tf) VALUES (?, ?, ?, ?, ?)", (
+                db_cursor.execute("INSERT INTO inverted_index (word, page_id, url, title, tf) VALUES (%s, %s, %s, %s, %s)", (
                     token,
                     self.page_informations["id"],
                     self.page_informations["url"],
@@ -98,27 +107,25 @@ class Indexer:
                 ))
 
                 # Update the number of pages with this word
-                db.execute("""INSERT INTO term_documents (word, documents_number) VALUES (?, 1)
-                ON CONFLICT(word) DO UPDATE SET documents_number = documents_number + 1""", (
+                db_cursor.execute("""INSERT INTO term_documents (word, documents_number) VALUES (%s, 1)
+                ON CONFLICT (word) DO UPDATE SET documents_number = term_documents.documents_number + 1""", (
                     token,
                 ))
 
             # Update the total number of pages
-            db.execute("""INSERT INTO term_documents (word, documents_number) VALUES ('', 1)
-            ON CONFLICT(word) DO UPDATE SET documents_number = documents_number + 1""")
+            db_cursor.execute("""INSERT INTO term_documents (word, documents_number) VALUES ('', 1)
+            ON CONFLICT (word) DO UPDATE SET documents_number = term_documents.documents_number + 1""")
 
-            db.commit()
+            self.db.commit()
 
         # Mark page as indexed
-        with sqlite3.connect("parse.db", timeout=self.db_timeout) as db:
-            db.execute("UPDATE page_informations SET indexed = 1 WHERE id = ?", (self.page_informations["id"],))
-            db.commit()
+        with self.db.cursor() as db_cursor:
+            db_cursor.execute("UPDATE page_informations SET indexed = 1 WHERE id = %s", (self.page_informations["id"],))
+            self.db.commit()
 
     def calculate_tf_idf(self):
         # Connect to database
-        with sqlite3.connect("index.db", timeout=self.db_timeout) as db:
-            db_cursor = db.cursor()
-
+        with self.db.cursor() as db_cursor:
             # Check queue
             i = 1
             n_pages_to_get = 20
@@ -131,7 +138,7 @@ class Indexer:
             while i <= max_i:
                 print(f"I : {i}\nMaxI : {max_i}")
                 # Get TF's words
-                db_cursor.execute("SELECT word, tf FROM inverted_index WHERE id >= ? AND id < ? ORDER BY id", (
+                db_cursor.execute("SELECT word, tf FROM inverted_index WHERE id >= %s AND id < %s ORDER BY id", (
                     i,
                     i+n_pages_to_get,
                 ))
@@ -139,7 +146,7 @@ class Indexer:
 
                 # Get list of document's number with word in
                 words = [w for w, _ in word_tfs]
-                db_cursor.execute(f"SELECT word, documents_number FROM term_documents WHERE word IN ({','.join(['?']*len(words))})", words)
+                db_cursor.execute(f"SELECT word, documents_number FROM term_documents WHERE word IN ({','.join(['%s']*len(words))})", words)
                 documents_number_with_words = dict(db_cursor.fetchall())
 
                 # Calculate tf idf
@@ -162,8 +169,8 @@ class Indexer:
                     local_i += 1
 
                 # Save TF-IDF
-                db_cursor.executemany("UPDATE inverted_index SET tf_idf = ? WHERE id = ?", tf_idfs)
-                db.commit()
+                db_cursor.executemany("UPDATE inverted_index SET tf_idf = %s WHERE id = %s", tf_idfs)
+                self.db.commit()
                 print("Ajouté")
 
                 i += n_pages_to_get
@@ -183,24 +190,28 @@ class Indexer:
         print("---------------------------------------------------------------------------------------------")
 
     def run(self, i_bfr_tf_idf: int = 10, i: int = 0):
-        self.init()
+        try:
+            self.init()
 
-        if i == 0:
-            running = True
-            j = 0
-            while running:
-                j += 1
-                self.__run()
-                if j%i_bfr_tf_idf == 0:
-                    self.calculate_tf_idf()
+            if i == 0:
+                running = True
+                j = 0
+                while running:
+                    j += 1
+                    self.__run()
+                    if j % i_bfr_tf_idf == 0:
+                        self.calculate_tf_idf()
 
-        else:
-            j = 0
-            for _ in range(i):
-                j += 1
-                self.__run()
-                if j % i_bfr_tf_idf == 0:
-                    self.calculate_tf_idf()
+            else:
+                j = 0
+                for _ in range(i):
+                    j += 1
+                    self.__run()
+                    if j % i_bfr_tf_idf == 0:
+                        self.calculate_tf_idf()
+
+        finally:
+            self.db.close()
 
 
 if __name__ == "__main__":
