@@ -30,7 +30,8 @@ class Parser:
                 url TEXT,
                 page_filename TEXT,
                 title TEXT,
-                indexed INTEGER
+                indexed INTEGER,
+                page_rank REAL
             )
             """)
             db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_informations_url ON page_informations(url)")

@@ -80,9 +80,18 @@ class Crawler:
                 last_visit TIMESTAMPTZ
             )
             """)
+            db_cursor.execute("""
+            CREATE TABLE IF NOT EXISTS page_links (
+                id SERIAL PRIMARY KEY,
+                source_url TEXT,
+                target_url TEXT
+            )
+            """)
             db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_queue_url ON queue(url)")
             db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_visited_urls_url ON visited_urls(url)")
             db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_visited_domains_url ON visited_domains(url)")
+            db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_links_source_url ON page_links(source_url)")
+            db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_links_target_url ON page_links(target_url)")
             self.db.commit()
 
             # Load queue if there are urls in db's queue
@@ -188,11 +197,20 @@ class Crawler:
         urls = {(url, domain,) for url, domain in urls if not url in  visited_urls and not url in urls_in_queue}
         db_cursor.executemany("INSERT INTO queue (url, domain) VALUES (%s, %s)", [(url, domain,) for url, domain in urls])
 
+    def __add_links_relations(self, links_relations: list, db_cursor):
+        # Check if there are links
+        if not links_relations:
+            return
+
+        # Add relations in db
+        db_cursor.executemany("INSERT INTO page_links (source_url, target_url) VALUES (%s, %s)", links_relations)
+
     def __get_links(self):
         # Get all a tags
         links = self.page.find_all("a")
 
         urls = []
+        links_relations = []
         # Get & format all links
         for a in links:
             # Check if there's href in a
@@ -230,11 +248,15 @@ class Crawler:
                     url = f"{parsed_url.scheme}://{parsed_url.netloc}{url_path}".rstrip('/')
                     domain = parsed_url.netloc
                     urls.append((url, domain,))
+                    links_relations.append((self.url, url))
 
 
         with self.db.cursor() as db_cursor:
             # Add urls in database queue
             self.__add_urls_in_queue(urls=urls, db_cursor=db_cursor)
+
+            # Add link's relations
+            self.__add_links_relations(links_relations=links_relations, db_cursor=db_cursor)
 
             # Add URLs in queue & close connection
             self.db.commit()
@@ -424,4 +446,4 @@ class RobotsTxt:
 
 if __name__ == "__main__":
     crawler = Crawler()
-    crawler.run()
+    crawler.run(i=20)

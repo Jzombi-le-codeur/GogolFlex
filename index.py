@@ -123,7 +123,7 @@ class Indexer:
             db_cursor.execute("UPDATE page_informations SET indexed = 1 WHERE id = %s", (self.page_informations["id"],))
             self.db.commit()
 
-    def calculate_tf_idf(self):
+    def __calculate_tf_idf(self):
         # Connect to database
         with self.db.cursor() as db_cursor:
             # Check queue
@@ -177,6 +177,60 @@ class Indexer:
                 print("-------------------------------------------")
                 # input("")
 
+    def __calculate_page_ranks(self):
+        d = 0.85
+        with self.db.cursor() as db_cursor:
+            # Get total_numbers documents
+            db_cursor.execute("SELECT documents_number FROM term_documents WHERE word = ''")
+            total_documents_number = db_cursor.fetchone()[0]
+
+            # Get number of links in each pages
+            db_cursor.execute("SELECT source_url, COUNT(*) FROM page_links GROUP BY source_url")
+            out_links = dict(db_cursor.fetchall())
+
+            # Calculate first part of page_rank
+            first_part = (1-d)/total_documents_number
+
+            # Get links relations
+            db_cursor.execute("SELECT source_url, target_url FROM page_links")
+            links_relations_sql = db_cursor.fetchall()
+
+            # Init page_ranks
+            init_score = (1 / total_documents_number)
+            db_cursor.execute("SELECT url FROM page_informations")
+            urls = db_cursor.fetchall()
+            page_ranks = {url[0]: init_score for url in urls}
+
+            # Format links relations & page ranks
+            links_relations = {}
+            for relation in links_relations_sql:
+                source_url = relation[0]
+                target_url = relation[1]
+                if target_url in links_relations.keys():
+                    links_relations[target_url].append(source_url)
+
+                else:
+                    links_relations[target_url] = [source_url]
+
+            # Calculate pagerank of each page
+            iterations = 100
+            for _ in range(iterations):
+                for target_url, sources in links_relations.items():
+                    contributions = []
+                    for source in sources:
+                        contributions.append((page_ranks[source]/out_links[source]))
+
+                    page_ranks[target_url] = first_part + d*sum(contributions)
+
+            # Format pageranks list and add them in db
+            page_ranks = [(page_rank, url,) for url, page_rank in page_ranks.items()]
+            db_cursor.executemany("UPDATE page_informations SET page_rank = %s WHERE url = %s", page_ranks)
+            self.db.commit()
+
+    def calculate_score(self):
+        self.__calculate_tf_idf()
+        self.__calculate_page_ranks()
+
     def __run(self):
         if not self.pages_informations:
             self.__get_pages_informations()
@@ -200,7 +254,7 @@ class Indexer:
                     j += 1
                     self.__run()
                     if j % i_bfr_tf_idf == 0:
-                        self.calculate_tf_idf()
+                        self.calculate_score()
 
             else:
                 j = 0
@@ -208,7 +262,7 @@ class Indexer:
                     j += 1
                     self.__run()
                     if j % i_bfr_tf_idf == 0:
-                        self.calculate_tf_idf()
+                        self.calculate_score()
 
         finally:
             self.db.close()
@@ -216,4 +270,4 @@ class Indexer:
 
 if __name__ == "__main__":
     indexer = Indexer()
-    indexer.run()
+    indexer.calculate_score()
