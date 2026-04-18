@@ -122,7 +122,13 @@ class Crawler:
 
     def __request(self):
         try:
-            self.response = requests.get(self.url, headers=self.headers, timeout=20)
+            response = requests.head(self.url, headers=self.headers, timeout=20)
+            content_type = response.headers.get("Content-type", "")
+            if "text/html" in content_type:
+                self.response = requests.get(self.url, headers=self.headers, timeout=20)
+
+            else:
+                self.response = None
 
         except requests.exceptions.RequestException:
             self.response = None
