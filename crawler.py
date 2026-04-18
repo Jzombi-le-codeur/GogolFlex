@@ -105,17 +105,21 @@ class Crawler:
             # Get queue
             queue = list()
             while not queue:
-                # Get pages of not visited domains
+                # Get pages of not visited domains & delete them from queue
                 db_cursor.execute("""
-                SELECT DISTINCT ON (q.domain) q.id, q.url
-                FROM queue q
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM visited_domains vd
-                    WHERE vd.url = q.domain
-                    AND vd.last_visit + (vd.crawl_delay * INTERVAL '1 second') > NOW()
+                DELETE FROM queue
+                WHERE id IN (
+                    SELECT DISTINCT ON (q.domain) q.id
+                    FROM queue q
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM visited_domains vd
+                        WHERE vd.url = q.domain
+                        AND vd.last_visit + (vd.crawl_delay * INTERVAL '1 second') > NOW()
+                    )
+                    ORDER BY q.domain, q.id
+                    LIMIT 10
                 )
-                ORDER BY q.domain, q.id
-                LIMIT 10
+                RETURNING id, url, domain
                 """)
                 queue = db_cursor.fetchall()
                 if not queue:
@@ -123,10 +127,7 @@ class Crawler:
 
             print(queue)
             self.queue = [u[1] for u in queue]
-            ids = [u[0] for u in queue]
 
-            # Delete these URLs from queue db
-            db_cursor.execute(f"DELETE FROM queue WHERE id IN ({','.join(['%s'] * len(ids))})", ids)
             self.db.commit()
 
     def __request(self):
@@ -142,17 +143,32 @@ class Crawler:
         except requests.exceptions.RequestException:
             self.response = None
 
-    def __mark_url_as_visited(self):
+    def __mark_url_as_visited(self, can_visit: bool):
         # Add URL in visited_urls
         print("Page filepath :", self.page_filepath)
         with self.db.cursor() as db_cursor:
-            db_cursor.execute("INSERT INTO visited_urls (url, indexation, page_filename, parsed) VALUES (%s, %s, %s, %s)", (
-                self.url,
-                int(self.robots_txt.authorizations["index"]),
-                self.page_filepath.name,
-                0,
-            ))
+            if can_visit:
+                db_cursor.execute("INSERT INTO visited_urls (url, indexation, page_filename, parsed) VALUES (%s, %s, %s, %s)", (
+                    self.url,
+                    int(self.robots_txt.authorizations["index"]),
+                    self.page_filepath.name,
+                    0,
+                ))
 
+            else:
+                db_cursor.execute(
+                    "INSERT INTO visited_urls (url, indexation, page_filename, parsed) VALUES (%s, %s, %s, %s)", (
+                        self.url,
+                        0,
+                        None,
+                        0,
+                    ))
+
+            self.db.commit()
+            print("PROUTTTT NUCLEAIRE")
+
+    def __mark_domain_as_visited(self):
+        with self.db.cursor() as db_cursor:
             # Set this site in visited domains
             timestamp = datetime.now(timezone.utc)
             db_cursor.execute(
@@ -168,9 +184,7 @@ class Crawler:
                     timestamp,
                 )
             )
-
             self.db.commit()
-            print("PROUTTTT NUCLEAIRE")
 
     def __get_page(self):
         # Parse page code
@@ -288,6 +302,8 @@ class Crawler:
         print(f"Nombre de sites à visiter : {len(self.queue)}")
 
         self.robots_txt.can_visit(url=self.url)
+        self.__mark_domain_as_visited()
+
         if self.robots_txt.authorizations["visit"]:
             # Get response from page
             self.__request()
@@ -306,7 +322,13 @@ class Crawler:
                 if self.robots_txt.authorizations["follow"]:
                     self.__get_links()
 
-            self.__mark_url_as_visited()  # Save datas
+                self.__mark_url_as_visited(can_visit=True)  # Save datas
+
+            else:
+                self.__mark_url_as_visited(can_visit=False)
+
+        else:
+            self.__mark_url_as_visited(can_visit=False)
 
         print("----------------------------")
         # time.sleep(self.robots_txt.crawl_delay)  # Wait not to DDOS host
