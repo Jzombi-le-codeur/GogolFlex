@@ -13,6 +13,9 @@ import os
 import psycopg
 from dotenv import load_dotenv
 from datetime import datetime, timezone
+import asyncio
+import aiohttp
+import aiofiles
 
 
 class Crawler:
@@ -26,7 +29,8 @@ class Crawler:
         # URLs
         self.queue = ["https://fr.wikipedia.org/wiki/Wikip%C3%A9dia:Accueil_principal", "https://nicot3m.pages-perso.free.fr/", "https://fr.wikihow.com/Accueil"]
         self.url = self.queue[0]
-        self.response = requests.Response()
+        self.response = str()
+        self.header = None
         self.page = BeautifulSoup("", "html.parser")
         self.page_filepath = pathlib.PurePath()
 
@@ -130,17 +134,19 @@ class Crawler:
 
             self.db.commit()
 
-    def __request(self):
+    async def __request(self, session: aiohttp.ClientSession):
         try:
-            response = requests.head(self.url, headers=self.headers, timeout=20)
-            content_type = response.headers.get("Content-type", "")
-            if "text/html" in content_type:
-                self.response = requests.get(self.url, headers=self.headers, timeout=20)
+            async with session.head(self.url, headers=self.headers, timeout=20) as response:
+                content_type = response.headers.get("Content-type", "")
+                if "text/html" in content_type:
+                    async with session.get(self.url, headers=self.headers, timeout=20) as resp:
+                        self.header = dict(resp.headers)
+                        self.response = await resp.text()
 
-            else:
-                self.response = None
+                else:
+                    self.response = None
 
-        except requests.exceptions.RequestException:
+        except aiohttp.ClientError :
             self.response = None
 
     def __mark_url_as_visited(self, can_visit: bool):
@@ -188,7 +194,7 @@ class Crawler:
 
     def __get_page(self):
         # Parse page code
-        self.page = BeautifulSoup(self.response.text, features="html.parser")
+        self.page = BeautifulSoup(self.response, features="html.parser")
 
     def __add_urls_in_queue(self, urls, db_cursor):
         # Stop function if there are 0 url
@@ -275,7 +281,7 @@ class Crawler:
             # Add URLs in queue & close connection
             self.db.commit()
 
-    def __save_page(self):
+    async def __save_page(self):
         print("caca")
         # Create page's file's information
         page_filename = f"{hashlib.blake2b(self.url.encode("utf-8"), digest_size=16).hexdigest()}.html"  # Filename : hashed page's url
@@ -287,10 +293,10 @@ class Crawler:
             os.makedirs(os.path.dirname(self.page_filepath))
 
         # Write file
-        with open(self.page_filepath, "w", encoding="utf-8") as page_file:
-            page_file.write(self.page.prettify())
+        async with aiofiles.open(self.page_filepath, "w", encoding="utf-8") as page_file:
+            await page_file.write(self.page.prettify())
 
-    def __run(self):
+    async def __run(self, session):
         # Load queue if queue is empty
         if len(self.queue) == 0:
             self.__load_queue()
@@ -301,12 +307,12 @@ class Crawler:
         print(f"URl de la page : {self.url}")
         print(f"Nombre de sites à visiter : {len(self.queue)}")
 
-        self.robots_txt.can_visit(url=self.url)
+        await self.robots_txt.can_visit(url=self.url, session=session)
         self.__mark_domain_as_visited()
 
         if self.robots_txt.authorizations["visit"]:
             # Get response from page
-            self.__request()
+            await self.__request(session=session)
             if self.response:
                 # Get page's authorizations
                 self.robots_txt.get_authorizations()
@@ -316,7 +322,7 @@ class Crawler:
                 self.__get_page()  # Get page code
 
                 # Save datas
-                self.__save_page()  # Save page
+                await self.__save_page()  # Save page
 
                 # Get page's links
                 if self.robots_txt.authorizations["follow"]:
@@ -331,29 +337,33 @@ class Crawler:
             self.__mark_url_as_visited(can_visit=False)
 
         print("----------------------------")
-        # time.sleep(self.robots_txt.crawl_delay)  # Wait not to DDOS host
-        time.sleep(0.1)
+        # await asyncio.sleep(self.robots_txt.crawl_delay)  # Wait not to DDOS host
+        await asyncio.sleep(0.1)
 
-    def run(self, i: int = 0):
+    async def run_crawler(self, i: int = 0):
         try:
             # Initialization
             self.init()
 
-            if i == 0:
-                running = True
-                while running:
-                    a = time.time()
-                    self.__run()
-                    print("TEMPS :", time.time() - a)
-                    print("________________________________________")
+            async with aiohttp.ClientSession() as session:
+                if i == 0:
+                    running = True
+                    while running:
+                        a = time.time()
+                        await self.__run(session=session)
+                        print("TEMPS :", time.time() - a)
+                        print("________________________________________")
 
-            else:
-                for _ in range(i):
-                    self.__run()
+                else:
+                    for _ in range(i):
+                        await self.__run(session=session)
 
         finally:
             self.db.close()
 
+    async def run(self, n_crawlers: int, i: int = 0):
+        tasks = [self.run_crawler(i=i) for _ in range(n_crawlers)]
+        await asyncio.gather(*tasks)
 
 class RobotsTxt:
     def __init__(self, crawler: Crawler):
@@ -362,6 +372,7 @@ class RobotsTxt:
         self.name = self.crawler.name
         self.headers = self.crawler.headers
         self.response = self.crawler.response
+        self.header = self.crawler.header
 
         # Page authorizations
         self.authorizations = {"visit": True, "index": True, "follow": True}
@@ -370,30 +381,32 @@ class RobotsTxt:
         # Create RobotsTXT folder
         os.makedirs("RobotsTXT") if not os.path.exists("RobotsTXT") else None
 
-    def __get_robots_txt_file(self, url_base: urllib.parse.ParseResult):
+    async def __get_robots_txt_file(self, url_base: urllib.parse.ParseResult, session):
         s = time.time()
         robots_txt_filepath = pathlib.PurePath("RobotsTXT", f"{url_base.netloc}.txt")
         if os.path.exists(robots_txt_filepath):
-            with open(robots_txt_filepath, "r", encoding="utf-8") as robots_txt_file:
-                robots_txt_file_content = robots_txt_file.read()
+            async with aiofiles.open(robots_txt_filepath, "r", encoding="utf-8") as robots_txt_file:
+                robots_txt_file_content = await robots_txt_file.read()
 
         else:
             robots_txt_url = f"{url_base.scheme}://{url_base.netloc}/robots.txt"
-            robots_txt_file_content = requests.get(robots_txt_url, headers=self.headers).text
-            with open(robots_txt_filepath, "w", encoding="utf-8") as robots_txt_file:
-                robots_txt_file.write(robots_txt_file_content)
+            async with session.get(robots_txt_url, headers=self.headers) as response:
+                robots_txt_file_content = await response.text()
+
+            async with aiofiles.open(robots_txt_filepath, "w", encoding="utf-8") as robots_txt_file:
+                await robots_txt_file.write(robots_txt_file_content)
 
         print("TIME :", time.time()-s)
         return robots_txt_file_content
 
-    def can_visit(self, url: str):
+    async def can_visit(self, url: str, session):
         # Get robots.txt url
         url_base = urlparse(url)
 
         # Get robots.txt content
         try:
             # robots_txt_file =
-            robots_txt_file = self.__get_robots_txt_file(url_base=url_base)
+            robots_txt_file = await self.__get_robots_txt_file(url_base=url_base, session=session)
             rfp = RobotFileParser()
             rfp.parse(robots_txt_file.splitlines())
 
@@ -439,7 +452,7 @@ class RobotsTxt:
 
     def get_x_robots_tag_authorizations(self):
         # Get X-Robots-Tag
-        response_headers = self.response.headers
+        response_headers = self.header
         try:
             x_robots_tag = response_headers["X-Robots-Tag"]
 
@@ -451,7 +464,7 @@ class RobotsTxt:
 
     def get_meta_robots_authorizations(self):
         # Get meta-robots
-        page = self.response.text
+        page = self.response
         page = BeautifulSoup(page, features="html.parser")
         meta_robots = page.find_all("meta", attrs={"name": "robots"})
         meta_robots = ",".join([m["content"] for m in meta_robots])
@@ -462,10 +475,11 @@ class RobotsTxt:
     def get_authorizations(self):
         self.authorizations = {"visit": True, "index": True, "follow": True}  # Reset authorizations
         self.response = self.crawler.response  # Get response from page
+        self.header = self.crawler.header
         self.get_x_robots_tag_authorizations()
         self.get_meta_robots_authorizations()
 
 
 if __name__ == "__main__":
     crawler = Crawler()
-    crawler.run(i=20)
+    asyncio.run(crawler.run(n_crawlers=2))
