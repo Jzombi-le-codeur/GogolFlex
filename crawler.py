@@ -111,28 +111,63 @@ class Crawler:
             queue = list()
             while not queue:
                 # Get pages of not visited domains & delete them from queue
+                # await db_cursor.execute("""
+                # DELETE FROM queue
+                # WHERE id IN (
+                #     SELECT DISTINCT ON (q.domain) q.id
+                #     FROM queue q
+                #     WHERE NOT EXISTS (
+                #         SELECT 1 FROM visited_domains vd
+                #         WHERE vd.url = q.domain
+                #         AND vd.last_visit + (vd.crawl_delay * INTERVAL '1 second') > NOW()
+                #     )
+                #     ORDER BY q.domain, q.id
+                #     LIMIT 10
+                # )
+                # RETURNING id, url, domain
+                # """)
+
                 await db_cursor.execute("""
-                DELETE FROM queue
-                WHERE id IN (
-                    SELECT DISTINCT ON (q.domain) q.id
-                    FROM queue q
-                    WHERE NOT EXISTS (
-                        SELECT 1 FROM visited_domains vd
-                        WHERE vd.url = q.domain
-                        AND vd.last_visit + (vd.crawl_delay * INTERVAL '1 second') > NOW()
-                    )
-                    ORDER BY q.domain, q.id
-                    LIMIT 10
+                SELECT q.id, q.url, q.domain
+                FROM queue q
+                WHERE NOT EXISTS (
+                    SELECT 1 FROM visited_domains vd
+                    WHERE vd.url = q.domain
+                    AND vd.last_visit + (vd.crawl_delay * INTERVAL '1 second') > NOW()
                 )
-                RETURNING id, url, domain
+                ORDER BY q.domain, q.id
+                LIMIT 10
+                FOR UPDATE SKIP LOCKED
                 """)
+
                 queue = await db_cursor.fetchall()
                 if not queue:
                     await asyncio.sleep(0.5)
 
+                else:
+                    timestamp = datetime.now(timezone.utc)
+                    urls_to_keep = []
+                    visited_domains = []
+                    for id, url, domain in queue:
+                        if not domain in visited_domains:
+                            urls_to_keep.append(url)
+                            visited_domains.append(domain)
+                            await db_cursor.execute("""
+                            DELETE FROM queue WHERE id = %s
+                            """, (id,))
+
+                    for domain in visited_domains:
+                        await db_cursor.execute("""
+                        INSERT INTO visited_domains (url, crawl_delay, last_visit)
+                        VALUES (%s, %s, %s)
+                        ON CONFLICT (url) DO UPDATE
+                        SET last_visit = EXCLUDED.last_visit
+                        """, (domain, 1, timestamp))
+
+            queue = urls_to_keep
             print(queue)
             async with self.queue_lock:
-                [self.queue.put_nowait(u[1]) for u in queue]
+                [self.queue.put_nowait(url) for url in queue]
 
             await self.db.commit()
 
@@ -141,7 +176,7 @@ class Crawler:
             async with session.head(url, headers=self.headers, timeout=aiohttp.ClientTimeout(total=20), allow_redirects=True) as response:
                 content_type = response.headers.get("Content-type", "")
                 if "text/html" in content_type:  # Check if the document is a web page
-                    async with session.get(url, headers=self.headers, timeout=20) as resp:
+                    async with session.get(url, headers=self.headers, timeout=aiohttp.ClientTimeout(total=20)) as resp:
                         # Doule check on document type
                         content_type = resp.headers.get("Content-Type", "")
                         if "text/html" not in content_type:
@@ -188,8 +223,8 @@ class Crawler:
         async with self.db.cursor() as db_cursor:
             # Set this site in visited domains
             timestamp = datetime.now(timezone.utc)
-            domain = tldextract.extract(url)
-            domain = f"{domain.domain}.{domain.suffix}"
+            extracted = tldextract.extract(url)
+            domain = str(extracted.domain)
             await db_cursor.execute(
                 """
                 INSERT INTO visited_domains (url, crawl_delay, last_visit)
@@ -280,7 +315,7 @@ class Crawler:
 
                     url = f"{parsed_url.scheme}://{parsed_url.netloc}{url_path}".rstrip('/')
                     extracted = tldextract.extract(url)
-                    domain = f"{extracted.domain}.{extracted.suffix}"
+                    domain = str(extracted.domain)
                     urls.append((url, domain,))
                     links_relations.append((page_url, url))
 
@@ -320,20 +355,20 @@ class Crawler:
         url = await self.queue.get()  # Get URl and delete it
 
         # Check if URL is in delay
-        extracted = tldextract.extract(url)
-        domain = f"{extracted.domain}.{extracted.suffix}"
-        async with self.db.cursor() as db_cursor:
-            await db_cursor.execute("""
-            SELECT 1 FROM visited_domains
-            WHERE url = %s
-            AND last_visit + (crawl_delay * INTERVAL '1 second') > NOW()
-            """, (domain,))
-            too_soon = await db_cursor.fetchone()
-
-        if too_soon:
-            await self.queue.put(url)  # Remet en queue
-            await asyncio.sleep(0.1)
-            return
+        # extracted = tldextract.extract(url)
+        # domain = f"{extracted.domain}.{extracted.suffix}"
+        # async with self.db.cursor() as db_cursor:
+        #     await db_cursor.execute("""
+        #     SELECT 1 FROM visited_domains
+        #     WHERE url = %s
+        #     AND last_visit + (crawl_delay * INTERVAL '1 second') > NOW()
+        #     """, (domain,))
+        #     too_soon = await db_cursor.fetchone()
+        #
+        # if too_soon:
+        #     await self.queue.put(url)  # Remet en queue
+        #     await asyncio.sleep(0.1)
+        #     return
 
         print(f"URl de la page : {url}")
         print(f"Nombre de sites à visiter : {self.queue.qsize()}")
@@ -513,4 +548,4 @@ class RobotsTxt:
 
 if __name__ == "__main__":
     crawler = Crawler()
-    asyncio.run(crawler.run(n_crawlers=1), loop_factory=asyncio.SelectorEventLoop)
+    asyncio.run(crawler.run(n_crawlers=2), loop_factory=asyncio.SelectorEventLoop)
