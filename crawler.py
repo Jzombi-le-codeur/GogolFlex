@@ -26,7 +26,8 @@ class Crawler:
         # Bot Informations
         self.name = "GogolFlexBot"
         self.headers = {
-            "User-Agent": self.name
+            "User-Agent": self.name,
+            "Cookie": "CONSENT=YES+; SOCS=CAI"
         }
 
         # URLs
@@ -139,18 +140,18 @@ class Crawler:
                     # RETURNING id, url, domain
                     # """)
 
-                    await db_cursor.execute("""
+                    await db_cursor.execute(f"""
                     SELECT q.id, q.url, q.domain
                     FROM queue q
                     WHERE NOT EXISTS (
                         SELECT 1 FROM visited_domains vd
                         WHERE vd.url = q.domain
-                        AND vd.last_visit + (vd.crawl_delay * INTERVAL '1 second') > NOW()
+                        AND vd.last_visit + (vd.crawl_delay * INTERVAL '1 second' * %s) > NOW()
                     )
                     ORDER BY q.domain, q.id
                     LIMIT 10
                     FOR UPDATE SKIP LOCKED
-                    """)
+                    """, (self.robots_txt.default_crawl_delay,))
 
                     queue = await db_cursor.fetchall()
                     if not queue:
@@ -174,7 +175,7 @@ class Crawler:
                             VALUES (%s, %s, %s)
                             ON CONFLICT (url) DO UPDATE
                             SET last_visit = EXCLUDED.last_visit
-                            """, (domain, 1, timestamp))
+                            """, (domain, self.robots_txt.default_crawl_delay, timestamp))
 
                 queue = urls_to_keep
                 print(queue)
@@ -424,31 +425,31 @@ class Crawler:
         await asyncio.sleep(0.1)
 
     async def run_crawler(self, i: int = 0):
-        try:
-            async with aiohttp.ClientSession() as session:
-                if i == 0:
-                    running = True
-                    while running:
-                        a = time.time()
-                        await self.__run(session=session)
-                        print("TEMPS :", time.time() - a)
-                        print("________________________________________")
+        async with aiohttp.ClientSession() as session:
+            if i == 0:
+                running = True
+                while running:
+                    a = time.time()
+                    await self.__run(session=session)
+                    print("TEMPS :", time.time() - a)
+                    print("________________________________________")
 
-                else:
-                    for _ in range(i):
-                        await self.__run(session=session)
+            else:
+                for _ in range(i):
+                    await self.__run(session=session)
+
+    async def run(self, n_crawlers: int, i: int = 0):
+        try:
+            self.n_crawlers = n_crawlers
+
+            # Initialization
+            await self.init()
+
+            tasks = [self.run_crawler(i=i) for _ in range(n_crawlers)]
+            await asyncio.gather(*tasks)
 
         finally:
             await self.pool.close()
-
-    async def run(self, n_crawlers: int, i: int = 0):
-        self.n_crawlers = n_crawlers
-
-        # Initialization
-        await self.init()
-
-        tasks = [self.run_crawler(i=i) for _ in range(n_crawlers)]
-        await asyncio.gather(*tasks)
 
 class RobotsTxt:
     def __init__(self, crawler: Crawler):
@@ -459,6 +460,8 @@ class RobotsTxt:
 
         # Create RobotsTXT folder
         os.makedirs("RobotsTXT") if not os.path.exists("RobotsTXT") else None
+
+        self.default_crawl_delay = 1
 
     async def __get_robots_txt_file(self, url_base: urllib.parse.ParseResult, session):
         s = time.time()
@@ -494,7 +497,7 @@ class RobotsTxt:
 
             # Get Crawl-delay
             crawl_delay = rfp.crawl_delay(self.name)
-            crawl_delay = crawl_delay if crawl_delay else 1
+            crawl_delay = crawl_delay if crawl_delay else self.default_crawl_delay
 
         except aiohttp.ClientError:
             authorizations["visit"] = False
