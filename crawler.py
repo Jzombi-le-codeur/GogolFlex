@@ -2,6 +2,8 @@ import time
 import urllib.parse
 from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
+
+from aiohttp import set_zlib_backend
 from bs4 import BeautifulSoup
 import re
 from datetime import datetime, timezone
@@ -10,6 +12,7 @@ import hashlib
 import pathlib
 import os
 import psycopg
+from psycopg_pool import AsyncConnectionPool
 from dotenv import load_dotenv
 from datetime import datetime, timezone
 import asyncio
@@ -36,140 +39,149 @@ class Crawler:
 
         # DB connection
         load_dotenv(encoding="utf-8")
-        self.db = None
+        self.n_crawlers = int()
+        self.pool = None
 
     async def __check_if_db_is_empty(self):
-        async with self.db.cursor() as db_cursor:
-            await db_cursor.execute("SELECT id FROM queue LIMIT 1")
-            # Check if db is empty
-            if not await db_cursor.fetchone():
-                return True
+        async with self.pool.connection() as conn:
+            async with conn.cursor() as db_cursor:
+                await db_cursor.execute("SELECT id FROM queue LIMIT 1")
+                # Check if db is empty
+                if not await db_cursor.fetchone():
+                    return True
 
-            else:
-                return False
+                else:
+                    return False
 
     async def init(self):
         # Connect to database
-        self.db = await psycopg.AsyncConnection.connect(
-            dbname="GogolFlexDB",
-            user="postgres",
-            password=os.getenv("PASSWORD"),
-            host="localhost",
-            port=5432
+        self.pool = AsyncConnectionPool(
+            conninfo=f"""
+            dbname=GogolFlexDB 
+            user=postgres 
+            password={os.getenv("PASSWORD")} 
+            host=localhost port=5432 
+            """,
+            min_size=1,
+            max_size=self.n_crawlers,
+            open=False
         )
+        await self.pool.open()
 
         # Create database
-        async with self.db.cursor() as db_cursor:
-            await db_cursor.execute("""
-            CREATE TABLE IF NOT EXISTS queue (
-                id SERIAL PRIMARY KEY,
-                url TEXT,
-                domain TEXT
-            )
-            """)
-            await db_cursor.execute("""
-            CREATE TABLE IF NOT EXISTS visited_urls (
-                id SERIAL PRIMARY KEY,
-                url TEXT,
-                indexation INTEGER,
-                page_filename TEXT,
-                parsed INTEGER
-            )
-            """)
-            await db_cursor.execute("""
-            CREATE TABLE IF NOT EXISTS visited_domains (
-                id SERIAL PRIMARY KEY,
-                url TEXT UNIQUE,
-                crawl_delay REAL,
-                last_visit TIMESTAMPTZ
-            )
-            """)
-            await db_cursor.execute("""
-            CREATE TABLE IF NOT EXISTS page_links (
-                id SERIAL PRIMARY KEY,
-                source_url TEXT,
-                target_url TEXT
-            )
-            """)
-            await db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_queue_url ON queue(url)")
-            await db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_visited_urls_url ON visited_urls(url)")
-            await db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_visited_domains_url ON visited_domains(url)")
-            await db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_links_source_url ON page_links(source_url)")
-            await db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_links_target_url ON page_links(target_url)")
-            await self.db.commit()
+        async with self.pool.connection() as conn:
+            async with conn.cursor() as db_cursor:
+                await db_cursor.execute("""
+                CREATE TABLE IF NOT EXISTS queue (
+                    id SERIAL PRIMARY KEY,
+                    url TEXT,
+                    domain TEXT
+                )
+                """)
+                await db_cursor.execute("""
+                CREATE TABLE IF NOT EXISTS visited_urls (
+                    id SERIAL PRIMARY KEY,
+                    url TEXT,
+                    indexation INTEGER,
+                    page_filename TEXT,
+                    parsed INTEGER
+                )
+                """)
+                await db_cursor.execute("""
+                CREATE TABLE IF NOT EXISTS visited_domains (
+                    id SERIAL PRIMARY KEY,
+                    url TEXT UNIQUE,
+                    crawl_delay REAL,
+                    last_visit TIMESTAMPTZ
+                )
+                """)
+                await db_cursor.execute("""
+                CREATE TABLE IF NOT EXISTS page_links (
+                    id SERIAL PRIMARY KEY,
+                    source_url TEXT,
+                    target_url TEXT
+                )
+                """)
+                await db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_queue_url ON queue(url)")
+                await db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_visited_urls_url ON visited_urls(url)")
+                await db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_visited_domains_url ON visited_domains(url)")
+                await db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_links_source_url ON page_links(source_url)")
+                await db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_links_target_url ON page_links(target_url)")
+                await conn.commit()
 
-            # Load queue if there are urls in db's queue
-            if not await self.__check_if_db_is_empty():
-                async with self.queue_lock:
-                    self.queue = asyncio.Queue()
-                await self.__load_queue()
+                # Load queue if there are urls in db's queue
+                if not await self.__check_if_db_is_empty():
+                    async with self.queue_lock:
+                        self.queue = asyncio.Queue()
+                    await self.__load_queue()
 
     async def __load_queue(self):
         print("cacaquipue")
-        async with self.db.cursor() as db_cursor:
-            # Get queue
-            queue = list()
-            while not queue:
-                # Get pages of not visited domains & delete them from queue
-                # await db_cursor.execute("""
-                # DELETE FROM queue
-                # WHERE id IN (
-                #     SELECT DISTINCT ON (q.domain) q.id
-                #     FROM queue q
-                #     WHERE NOT EXISTS (
-                #         SELECT 1 FROM visited_domains vd
-                #         WHERE vd.url = q.domain
-                #         AND vd.last_visit + (vd.crawl_delay * INTERVAL '1 second') > NOW()
-                #     )
-                #     ORDER BY q.domain, q.id
-                #     LIMIT 10
-                # )
-                # RETURNING id, url, domain
-                # """)
+        async with self.pool.connection() as conn:
+            async with conn.cursor() as db_cursor:
+                # Get queue
+                queue = list()
+                while not queue:
+                    # Get pages of not visited domains & delete them from queue
+                    # await db_cursor.execute("""
+                    # DELETE FROM queue
+                    # WHERE id IN (
+                    #     SELECT DISTINCT ON (q.domain) q.id
+                    #     FROM queue q
+                    #     WHERE NOT EXISTS (
+                    #         SELECT 1 FROM visited_domains vd
+                    #         WHERE vd.url = q.domain
+                    #         AND vd.last_visit + (vd.crawl_delay * INTERVAL '1 second') > NOW()
+                    #     )
+                    #     ORDER BY q.domain, q.id
+                    #     LIMIT 10
+                    # )
+                    # RETURNING id, url, domain
+                    # """)
 
-                await db_cursor.execute("""
-                SELECT q.id, q.url, q.domain
-                FROM queue q
-                WHERE NOT EXISTS (
-                    SELECT 1 FROM visited_domains vd
-                    WHERE vd.url = q.domain
-                    AND vd.last_visit + (vd.crawl_delay * INTERVAL '1 second') > NOW()
-                )
-                ORDER BY q.domain, q.id
-                LIMIT 10
-                FOR UPDATE SKIP LOCKED
-                """)
+                    await db_cursor.execute("""
+                    SELECT q.id, q.url, q.domain
+                    FROM queue q
+                    WHERE NOT EXISTS (
+                        SELECT 1 FROM visited_domains vd
+                        WHERE vd.url = q.domain
+                        AND vd.last_visit + (vd.crawl_delay * INTERVAL '1 second') > NOW()
+                    )
+                    ORDER BY q.domain, q.id
+                    LIMIT 10
+                    FOR UPDATE SKIP LOCKED
+                    """)
 
-                queue = await db_cursor.fetchall()
-                if not queue:
-                    await asyncio.sleep(0.5)
+                    queue = await db_cursor.fetchall()
+                    if not queue:
+                        await asyncio.sleep(0.5)
 
-                else:
-                    timestamp = datetime.now(timezone.utc)
-                    urls_to_keep = []
-                    visited_domains = []
-                    for id, url, domain in queue:
-                        if not domain in visited_domains:
-                            urls_to_keep.append(url)
-                            visited_domains.append(domain)
+                    else:
+                        timestamp = datetime.now(timezone.utc)
+                        urls_to_keep = []
+                        visited_domains = []
+                        for id, url, domain in queue:
+                            if not domain in visited_domains:
+                                urls_to_keep.append(url)
+                                visited_domains.append(domain)
+                                await db_cursor.execute("""
+                                DELETE FROM queue WHERE id = %s
+                                """, (id,))
+
+                        for domain in visited_domains:
                             await db_cursor.execute("""
-                            DELETE FROM queue WHERE id = %s
-                            """, (id,))
+                            INSERT INTO visited_domains (url, crawl_delay, last_visit)
+                            VALUES (%s, %s, %s)
+                            ON CONFLICT (url) DO UPDATE
+                            SET last_visit = EXCLUDED.last_visit
+                            """, (domain, 1, timestamp))
 
-                    for domain in visited_domains:
-                        await db_cursor.execute("""
-                        INSERT INTO visited_domains (url, crawl_delay, last_visit)
-                        VALUES (%s, %s, %s)
-                        ON CONFLICT (url) DO UPDATE
-                        SET last_visit = EXCLUDED.last_visit
-                        """, (domain, 1, timestamp))
+                queue = urls_to_keep
+                print(queue)
+                async with self.queue_lock:
+                    [self.queue.put_nowait(url) for url in queue]
 
-            queue = urls_to_keep
-            print(queue)
-            async with self.queue_lock:
-                [self.queue.put_nowait(url) for url in queue]
-
-            await self.db.commit()
+                await conn.commit()
 
     async def __request(self, session: aiohttp.ClientSession, url: str):
         try:
@@ -198,47 +210,49 @@ class Crawler:
     async def __mark_url_as_visited(self, url: str, can_visit: bool, page_filepath: pathlib.Path | None, authorizations: dict):
         # Add URL in visited_urls
         print("Page filepath :", page_filepath)
-        async with self.db.cursor() as db_cursor:
-            if can_visit:
-                await db_cursor.execute("INSERT INTO visited_urls (url, indexation, page_filename, parsed) VALUES (%s, %s, %s, %s)", (
-                    url,
-                    int(authorizations["index"]),
-                    page_filepath.name,
-                    0,
-                ))
-
-            else:
-                await db_cursor.execute(
-                    "INSERT INTO visited_urls (url, indexation, page_filename, parsed) VALUES (%s, %s, %s, %s)", (
+        async with self.pool.connection() as conn:
+            async with conn.cursor() as db_cursor:
+                if can_visit:
+                    await db_cursor.execute("INSERT INTO visited_urls (url, indexation, page_filename, parsed) VALUES (%s, %s, %s, %s)", (
                         url,
-                        0,
-                        None,
+                        int(authorizations["index"]),
+                        page_filepath.name,
                         0,
                     ))
 
-            await self.db.commit()
-            print("PROUTTTT NUCLEAIRE")
+                else:
+                    await db_cursor.execute(
+                        "INSERT INTO visited_urls (url, indexation, page_filename, parsed) VALUES (%s, %s, %s, %s)", (
+                            url,
+                            0,
+                            None,
+                            0,
+                        ))
+
+                await conn.commit()
+                print("PROUTTTT NUCLEAIRE")
 
     async def __mark_domain_as_visited(self, url: str, crawl_delay: int):
-        async with self.db.cursor() as db_cursor:
-            # Set this site in visited domains
-            timestamp = datetime.now(timezone.utc)
-            extracted = tldextract.extract(url)
-            domain = str(extracted.domain)
-            await db_cursor.execute(
-                """
-                INSERT INTO visited_domains (url, crawl_delay, last_visit)
-                VALUES (%s, %s, %s)
-                ON CONFLICT (url) DO UPDATE
-                SET last_visit = EXCLUDED.last_visit, crawl_delay = EXCLUDED.crawl_delay
-                """,
-                (
-                    domain,
-                    crawl_delay,
-                    timestamp,
+        async with self.pool.connection() as conn:
+            async with conn.cursor() as db_cursor:
+                # Set this site in visited domains
+                timestamp = datetime.now(timezone.utc)
+                extracted = tldextract.extract(url)
+                domain = str(extracted.domain)
+                await db_cursor.execute(
+                    """
+                    INSERT INTO visited_domains (url, crawl_delay, last_visit)
+                    VALUES (%s, %s, %s)
+                    ON CONFLICT (url) DO UPDATE
+                    SET last_visit = EXCLUDED.last_visit, crawl_delay = EXCLUDED.crawl_delay
+                    """,
+                    (
+                        domain,
+                        crawl_delay,
+                        timestamp,
+                    )
                 )
-            )
-            await self.db.commit()
+                await conn.commit()
 
     def __get_page(self, response):
         # Parse page code
@@ -319,15 +333,16 @@ class Crawler:
                     urls.append((url, domain,))
                     links_relations.append((page_url, url))
 
-        async with self.db.cursor() as db_cursor:
-            # Add urls in database queue
-            await self.__add_urls_in_queue(urls=urls, db_cursor=db_cursor)
+        async with self.pool.connection() as conn:
+            async with conn.cursor() as db_cursor:
+                # Add urls in database queue
+                await self.__add_urls_in_queue(urls=urls, db_cursor=db_cursor)
 
-            # Add link's relations
-            await self.__add_links_relations(links_relations=links_relations, db_cursor=db_cursor)
+                # Add link's relations
+                await self.__add_links_relations(links_relations=links_relations, db_cursor=db_cursor)
 
-            # Add URLs in queue & close connection
-            await self.db.commit()
+                # Add URLs in queue & close connection
+                await conn.commit()
 
     async def __save_page(self, url: str, page: BeautifulSoup):
         print("caca")
@@ -357,13 +372,14 @@ class Crawler:
         # Check if URL is in delay
         # extracted = tldextract.extract(url)
         # domain = f"{extracted.domain}.{extracted.suffix}"
-        # async with self.db.cursor() as db_cursor:
-        #     await db_cursor.execute("""
-        #     SELECT 1 FROM visited_domains
-        #     WHERE url = %s
-        #     AND last_visit + (crawl_delay * INTERVAL '1 second') > NOW()
-        #     """, (domain,))
-        #     too_soon = await db_cursor.fetchone()
+        # async with self.pool.connection() as conn:
+        #     async with conn.cursor() as db_cursor:
+        #         await db_cursor.execute("""
+        #         SELECT 1 FROM visited_domains
+        #         WHERE url = %s
+        #         AND last_visit + (crawl_delay * INTERVAL '1 second') > NOW()
+        #         """, (domain,))
+        #         too_soon = await db_cursor.fetchone()
         #
         # if too_soon:
         #     await self.queue.put(url)  # Remet en queue
@@ -423,9 +439,11 @@ class Crawler:
                         await self.__run(session=session)
 
         finally:
-            await self.db.close()
+            await self.pool.close()
 
     async def run(self, n_crawlers: int, i: int = 0):
+        self.n_crawlers = n_crawlers
+
         # Initialization
         await self.init()
 
