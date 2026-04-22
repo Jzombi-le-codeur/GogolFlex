@@ -1,0 +1,21 @@
+html, body {
+    margin: 0;
+    background: linear-gradient(#ffffff 30%, #e3e3e3);
+}
+
+.page {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    height: 100vh;
+}
+
+.search {
+    padding: 15vh;
+    gap: 1rem;
+}
+
+.title {
+    text-align: center;
+    font-size: 3.5rem;
+}
