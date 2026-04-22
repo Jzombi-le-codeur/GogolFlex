@@ -2,7 +2,6 @@ import time
 import urllib.parse
 from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
-
 from aiohttp import set_zlib_backend
 from bs4 import BeautifulSoup
 import re
@@ -19,6 +18,7 @@ import asyncio
 import aiohttp
 import aiofiles
 import tldextract
+import time
 
 
 class Crawler:
@@ -26,8 +26,9 @@ class Crawler:
         # Bot Informations
         self.name = "GogolFlexBot"
         self.headers = {
-            "User-Agent": self.name,
-            "Cookie": "CONSENT=YES+; SOCS=CAI"
+            "User-Agent": f"{self.name}/1.0 ( jirasak.habrias@gmail.com)",
+            "Cookie": "CONSENT=YES+; SOCS=CAI",
+            "Accept-Encoding": "gzip"
         }
 
         # URLs
@@ -64,7 +65,7 @@ class Crawler:
             host=localhost port=5432 
             """,
             min_size=1,
-            max_size=self.n_crawlers,
+            max_size=self.n_crawlers + 3,
             open=False
         )
         await self.pool.open()
@@ -155,7 +156,7 @@ class Crawler:
 
                     queue = await db_cursor.fetchall()
                     if not queue:
-                        await asyncio.sleep(0.5)
+                        await asyncio.sleep(2)
 
                     else:
                         timestamp = datetime.now(timezone.utc)
@@ -188,11 +189,11 @@ class Crawler:
         try:
             async with session.head(url, headers=self.headers, timeout=aiohttp.ClientTimeout(total=20), allow_redirects=True) as response:
                 content_type = response.headers.get("Content-type", "")
-                if "text/html" in content_type:  # Check if the document is a web page
+                if "text/html" in content_type or "text/plain" in content_type:  # Check if the document is a web page
                     async with session.get(url, headers=self.headers, timeout=aiohttp.ClientTimeout(total=20)) as resp:
                         # Doule check on document type
                         content_type = resp.headers.get("Content-Type", "")
-                        if "text/html" not in content_type:
+                        if "text/html" not in content_type and "text/plain" not in content_type:
                             return None, None
 
                         header = dict(resp.headers)
@@ -202,7 +203,7 @@ class Crawler:
                     response = None
                     header = None
 
-        except aiohttp.ClientError :
+        except (aiohttp.ClientError, TimeoutError, asyncio.CancelledError):
             response = None
             header = None
 
@@ -425,6 +426,7 @@ class Crawler:
         await asyncio.sleep(0.1)
 
     async def run_crawler(self, i: int = 0):
+
         async with aiohttp.ClientSession() as session:
             if i == 0:
                 running = True
@@ -473,7 +475,11 @@ class RobotsTxt:
         else:
             robots_txt_url = f"{url_base.scheme}://{url_base.netloc}/robots.txt"
             async with session.get(robots_txt_url, headers=self.headers) as response:
-                robots_txt_file_content = await response.text()
+                try:
+                    robots_txt_file_content = await response.text()
+
+                except UnicodeDecodeError:
+                    return ""
 
             async with aiofiles.open(robots_txt_filepath, "w", encoding="utf-8") as robots_txt_file:
                 await robots_txt_file.write(robots_txt_file_content)
@@ -499,7 +505,8 @@ class RobotsTxt:
             crawl_delay = rfp.crawl_delay(self.name)
             crawl_delay = crawl_delay if crawl_delay else self.default_crawl_delay
 
-        except aiohttp.ClientError:
+
+        except (aiohttp.ClientError, TimeoutError, asyncio.CancelledError):
             authorizations["visit"] = False
             crawl_delay = 0
 
@@ -569,4 +576,4 @@ class RobotsTxt:
 
 if __name__ == "__main__":
     crawler = Crawler()
-    asyncio.run(crawler.run(n_crawlers=2), loop_factory=asyncio.SelectorEventLoop)
+    asyncio.run(crawler.run(n_crawlers=5), loop_factory=asyncio.SelectorEventLoop)

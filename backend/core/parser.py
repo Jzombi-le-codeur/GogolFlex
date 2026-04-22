@@ -70,7 +70,12 @@ class Parser:
         # Find page title
 
         # Try to get <title> tag
-        title = self.page_code.find("title").text.strip()
+        if not self.page_code.find("title"):
+            title = ""
+
+        else:
+            title = self.page_code.find("title").text.strip()
+
         if title:
             # Save title
             self.page_informations["title"] = title
@@ -82,7 +87,7 @@ class Parser:
 
             # Try to get <meta name="twitter:title">
             if not title:
-                title = self.page_code.find("meta", name="twitter:title")
+                title = self.page_code.find("meta", attrs={"name": "twitter:title"})
 
             # Get meta title content
             if title:
@@ -94,6 +99,7 @@ class Parser:
                     title = self.page_code.find(f"h{i}")
                     if title:
                         title = title.text
+                        break
 
             # Get title by URL
             if not title:

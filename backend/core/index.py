@@ -47,7 +47,7 @@ class Indexer:
             """)
             db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_inverted_index_word ON inverted_index(word)")
             db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_informations_indexed ON page_informations(indexed)")
-            
+
             self.db.commit()
 
     def __get_pages_informations(self):
@@ -76,7 +76,9 @@ class Indexer:
             page_code = BeautifulSoup(page_file.read(), features="html.parser")
 
         # Just get body and title's text
-        self.page_text = page_code.find("title").get_text() + page_code.find("body").get_text()
+        title_tag = page_code.find("title")
+        body_tag = page_code.find("body")
+        self.page_text = title_tag.get_text() if title_tag else "" + body_tag.get_text() if body_tag else ""
 
     def __count_words(self):
         self.frequencies = {}
@@ -218,7 +220,8 @@ class Indexer:
                 for target_url, sources in links_relations.items():
                     contributions = []
                     for source in sources:
-                        contributions.append((page_ranks[source]/out_links[source]))
+                        if source in page_ranks and source in out_links:
+                            contributions.append((page_ranks[source]/out_links[source]))
 
                     page_ranks[target_url] = first_part + d*sum(contributions)
 
