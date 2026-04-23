@@ -1,25 +1,50 @@
 import Searchbar from "../components/searchbar/Searchbar";
-import {useState} from "react";
+import { useState, useEffect } from "react";
+import { useSearchParams } from "react-router-dom";
 
 export default function Home() {
-    const [results, setResults] = useState(false);
-    const [request, setRequest] = useState("");
+    const [searchParams, setSearchParams] = useSearchParams();
+    const [results, setResults] = useState([]);
+    const [query, setQuery] = useState("");
+
+    const search = (query) => {
+        fetch("http://localhost:8000/search", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({"query": query, n_results: 20})
+        })
+            .then(res => res.json())
+            .then(data => {
+                setResults(data.results);
+            })
+            .catch(err => console.log(err));
+    }
+
+    useEffect(() => {
+        const q = searchParams.get("q");
+        if (q) {
+            setQuery(q);
+            search(q);
+        }
+    }, [searchParams, search]);
 
     return (
-        <div className={`page${results ? " display-results" : ""}`}>
-            <h1 className={`title${results ? " display-results" : ""}`}><a href=".">GogolFlex</a></h1>
-            <div className={`main${results ? " display-results" : ""}`}>
-                <Searchbar results={results} setResults={setResults} request={request} setRequest={setRequest} />
-                {results ? (
+        <div className={`page${results.length > 0 ? " display-results" : ""}`}>
+            <h1 className={`title${results.length > 0 ? " display-results" : ""}`}><a href=".">GogolFlex</a></h1>
+            <div className={`main${results.length > 0 ? " display-results" : ""}`}>
+                <Searchbar search={search} query={query} setQuery={setQuery} />
+                {results.length > 0 ? (
                     <div className="results">
-                        <div className="result">
-                            <h3 className="result-title"><a href="https://fr.wikipedia.org/wiki/Wikip%C3%A9dia:Accueil_principal">Wikipédia</a></h3>
-                            <p className="result-url">https://fr.wikipedia.org/wiki/Wikip%C3%A9dia:Accueil_principal</p>
-                        </div>
-                        <div className="result">
-                            <h3 className="result-title"><a href="https://fr.wikipedia.org/wiki/Wikip%C3%A9dia:Accueil_principal">Wikipédia</a></h3>
-                            <p className="result-url">https://fr.wikipedia.org/wiki/Wikip%C3%A9dia:Accueil_principal</p>
-                        </div>
+                        {
+                            results.map((result) => (
+                                <div className="result">
+                                    <h3 className="result-title"><a href={result.url}>{result.title}</a></h3>
+                                    <p className="result-url">{result.url}</p>
+                                </div>
+                            ))
+                        }
                     </div>
                 ) : null}
             </div>
