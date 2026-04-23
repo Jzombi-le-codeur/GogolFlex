@@ -1,15 +1,14 @@
 import {useState} from "react";
 import "./Searchbar.css"
 
-export default function Searchbar() {
-    const [request, setRequest] = useState("");
+export default function Searchbar({ results, setResults, request, setRequest }) {
     return (
         <div className="search-bar">
             <div className="search-bar-input-box">
                 <input className="search-bar-input" type="text" value={request} onChange={(e) => {setRequest(e.target.value)}}/>
             </div>
             <div className="search-bar-button-box">
-                <button className="search-bar-button">
+                <button className="search-bar-button" onClick={() => setResults(true)}>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
                          fill="none" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                         <g transform="translate(-0.5, 2)">
