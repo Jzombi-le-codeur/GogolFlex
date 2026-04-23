@@ -1,6 +1,7 @@
 import psycopg
 from dotenv import load_dotenv
 import os
+import unicodedata
 
 
 class Searcher:
@@ -15,27 +16,33 @@ class Searcher:
             port=5432
         )
 
+    def __normalize(self, text):
+        nfkd = unicodedata.normalize("NFKD", text)
+        return "".join(c for c in nfkd if not unicodedata.combining(c))
+
     def __search(self, query: str, n_results: int):
         # Split query into many terms
         query = query.split()
+        query = [self.__normalize(t) for t in query]
 
         # Build SQL query
         sql_query = ["SELECT page_id FROM inverted_index WHERE word = %s" for _ in query]
         sql_query = " INTERSECT ".join(sql_query)
 
         # Get results
+        placeholders = ', '.join(['%s'] * len(query))
         with self.db.cursor() as db_cursor:
             db_cursor.execute(f"""
             SELECT inverted_index.url, inverted_index.title, 0.7*LOG(tf_idf + 1) + 0.3*LOG(page_rank + 1) AS score
             FROM inverted_index JOIN page_informations USING (url)
-            WHERE word in ({', '.join([f"'{term}'" for term in query])})
+            WHERE word IN ({placeholders})
             AND page_id IN (
                 {sql_query}
             )
             GROUP BY inverted_index.page_id, inverted_index.title, inverted_index.url, inverted_index.tf_idf, page_informations.page_rank
             ORDER BY SUM(0.7*LOG(tf_idf + 1)) + 0.3*LOG(MAX(page_rank) + 1) DESC
             LIMIT %s
-            """, tuple(query + [n_results]))
+            """, tuple(query) + tuple(query) + (n_results,))
             results = db_cursor.fetchall()
             for url, title, _ in results:
                 self.results.append({"title": title, "url": url})

@@ -124,23 +124,6 @@ class Crawler:
                 # Get queue
                 queue = list()
                 while not queue:
-                    # Get pages of not visited domains & delete them from queue
-                    # await db_cursor.execute("""
-                    # DELETE FROM queue
-                    # WHERE id IN (
-                    #     SELECT DISTINCT ON (q.domain) q.id
-                    #     FROM queue q
-                    #     WHERE NOT EXISTS (
-                    #         SELECT 1 FROM visited_domains vd
-                    #         WHERE vd.url = q.domain
-                    #         AND vd.last_visit + (vd.crawl_delay * INTERVAL '1 second') > NOW()
-                    #     )
-                    #     ORDER BY q.domain, q.id
-                    #     LIMIT 10
-                    # )
-                    # RETURNING id, url, domain
-                    # """)
-
                     await db_cursor.execute(f"""
                     SELECT q.id, q.url, q.domain
                     FROM queue q
@@ -149,7 +132,7 @@ class Crawler:
                         WHERE vd.url = q.domain
                         AND vd.last_visit + (vd.crawl_delay * INTERVAL '1 second' * %s) > NOW()
                     )
-                    ORDER BY q.domain, q.id
+                    ORDER BY q.id
                     LIMIT 10
                     FOR UPDATE SKIP LOCKED
                     """, (self.robots_txt.default_crawl_delay,))
@@ -309,7 +292,7 @@ class Crawler:
                 # Complete link with HTTP or HTTPS
                 elif link.startswith("//"):
                     parsed_url = urlparse(page_url)
-                    url = f"{parsed_url.scheme}{link}"
+                    url = f"{parsed_url.scheme}:{link}"
 
                 # Get URL
                 elif link.startswith("http"):

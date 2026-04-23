@@ -6,6 +6,7 @@ import re
 import math
 from dotenv import load_dotenv
 import os
+import unicodedata
 
 
 class Indexer:
@@ -80,6 +81,10 @@ class Indexer:
         body_tag = page_code.find("body")
         self.page_text = title_tag.get_text() if title_tag else "" + body_tag.get_text() if body_tag else ""
 
+    def __normalize(self, text):
+        nfkd = unicodedata.normalize("NFKD", text)
+        return "".join(c for c in nfkd if not unicodedata.combining(c))
+
     def __count_words(self):
         self.frequencies = {}
         # Tokenize page text
@@ -89,6 +94,7 @@ class Indexer:
         # Get word's frequencies in page
         for token in tokens:
             token = token.lower()
+            token = self.__normalize(text=token)
             if not token in self.frequencies.keys():
                 self.frequencies[token] = 1
 
