@@ -1,5 +1,5 @@
 import Searchbar from "../components/searchbar/Searchbar";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSearchParams } from "react-router-dom";
 
 export default function Home() {
@@ -7,7 +7,7 @@ export default function Home() {
     const [results, setResults] = useState([]);
     const [query, setQuery] = useState("");
 
-    const search = (query) => {
+    const search = useCallback(query => {
         fetch("http://localhost:8000/search", {
             method: "POST",
             headers: {
@@ -20,7 +20,7 @@ export default function Home() {
                 setResults(data.results);
             })
             .catch(err => console.log(err));
-    }
+    }, [])
 
     useEffect(() => {
         const q = searchParams.get("q");
