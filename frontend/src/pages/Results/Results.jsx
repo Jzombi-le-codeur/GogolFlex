@@ -9,7 +9,8 @@ export default function Results() {
     const [query, setQuery] = useState("");
 
     const doSearch = useCallback(query => {
-        fetch("http://localhost:8000/search", {
+        console.log(`http://${process.env.REACT_APP_API_HOST}:${process.env.REACT_APP_API_PORT}`);
+        fetch(`http://${process.env.REACT_APP_API_HOST}:${process.env.REACT_APP_API_PORT}/search`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",

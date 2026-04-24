@@ -4,23 +4,45 @@ html, body {
 }
 
 .page {
-    height: 100vh;
+    height: 100dvh;
     display: flex;
-    padding: 15vh;
+    padding: 15dvh;
     flex-direction: column;
     align-items: center;
     gap: 1rem;
 }
 
+@media (max-width: 768px) {
+    .page {
+        padding: 15dvh;
+        margin: 0;
+        max-width: 768px;
+    }
+}
+
 .page.display-results {
     margin: 0;
-    padding: 2vh;
+    padding: 2dvh;
     flex-direction: row;
     align-items: flex-start;
 }
 
+@media (max-width: 768px) {
+    .page.display-results {
+        display: flex;
+        align-items: center;
+        flex-direction: column;
+    }
+}
+
 .search-bar {
-    margin-top: 0.75vh;
+    margin-top: 0.75dvh;
+}
+
+@media (max-width: 768px) {
+    .search-bar {
+        width: min(80vw); /* ← contrainte la largeur sur mobile */
+    }
 }
 
 .title, .title a {
@@ -33,7 +55,17 @@ html, body {
 
 .title.display-results, .title.display-results a {
     font-size: 2rem;
-    margin: 1vh;
+    margin: 1dvh;
+}
+
+@media (max-width: 768px) {
+    .title, .title a {
+        color: black;
+        text-decoration: none;
+        text-align: center;
+        font-size: 3rem;
+        margin: 0;
+    }
 }
 
 .main {
@@ -46,6 +78,7 @@ html, body {
     flex-direction: column;
     margin-top: 1rem;
     gap: 2rem;
+    max-width: 80vw;
 }
 
 .result-title, .result-title a {
@@ -58,6 +91,8 @@ html, body {
 .result-url {
     margin: 0;
     color: green;
+    overflow-wrap: break-word;
+    word-break: break-all;
 }
 
 .message {
