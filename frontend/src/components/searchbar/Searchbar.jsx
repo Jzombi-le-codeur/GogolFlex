@@ -6,7 +6,7 @@ export default function Searchbar({ search, query, setQuery }) {
             <div className="search-bar-input-box">
                 <input
                     className="search-bar-input"
-                    type="text" value={query}
+                    type="search" value={query}
                     onChange={(e) => {
                         setQuery(e.target.value)
                     }}

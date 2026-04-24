@@ -36,8 +36,6 @@ def search(request: SearchRequest):
     query = [__normalize(term.lower()) for term in query]
     n_results = request.n_results
 
-    print(query, n_results)
-
     # Build SQL query
     sql_query = ["SELECT page_id FROM inverted_index WHERE word = %s" for _ in query]
     sql_query = " INTERSECT ".join(sql_query)
@@ -82,7 +80,6 @@ def search(request: SearchRequest):
 
     # Send results
     results_ = [{"title": title, "url": url} for url, title, _ in results]
-    print(results_)
     return {"results": results_}
 
 if __name__ == "__main__":
