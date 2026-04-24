@@ -33,8 +33,10 @@ def __normalize(text):
 def search(request: SearchRequest):
     # Get query and numbers of results expected
     query = request.query.split()
-    query = [__normalize(term) for term in query]
+    query = [__normalize(term.lower()) for term in query]
     n_results = request.n_results
+
+    print(query, n_results)
 
     # Build SQL query
     sql_query = ["SELECT page_id FROM inverted_index WHERE word = %s" for _ in query]
@@ -80,6 +82,7 @@ def search(request: SearchRequest):
 
     # Send results
     results_ = [{"title": title, "url": url} for url, title, _ in results]
+    print(results_)
     return {"results": results_}
 
 if __name__ == "__main__":
