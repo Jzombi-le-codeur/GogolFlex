@@ -5,6 +5,7 @@ from pydantic import BaseModel
 import psycopg
 from dotenv import load_dotenv
 import os
+import unicodedata
 
 
 load_dotenv()
@@ -23,10 +24,16 @@ class SearchRequest(BaseModel):
     query: str
     n_results: int
 
+
+def __normalize(text):
+    nfkd = unicodedata.normalize("NFKD", text)
+    return "".join(c for c in nfkd if not unicodedata.combining(c))
+
 @app.post("/search")
 def search(request: SearchRequest):
     # Get query and numbers of results expected
     query = request.query.split()
+    query = [__normalize(term) for term in query]
     n_results = request.n_results
 
     # Build SQL query
