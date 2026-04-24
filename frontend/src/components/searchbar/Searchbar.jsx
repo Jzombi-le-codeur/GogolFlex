@@ -4,7 +4,18 @@ export default function Searchbar({ search, query, setQuery }) {
     return (
         <div className="search-bar">
             <div className="search-bar-input-box">
-                <input className="search-bar-input" type="text" value={query} onChange={(e) => {setQuery(e.target.value)}}/>
+                <input
+                    className="search-bar-input"
+                    type="text" value={query}
+                    onChange={(e) => {
+                        setQuery(e.target.value)
+                    }}
+                    onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                            search(query);
+                        }
+                    }}
+                    />
             </div>
             <div className="search-bar-button-box">
                 <button className="search-bar-button" onClick={() => search(query)}>
