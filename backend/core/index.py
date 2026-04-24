@@ -19,12 +19,11 @@ class Indexer:
 
         load_dotenv(encoding="utf-8")
         self.db = psycopg.connect(
-            dbname="GogolFlexDB",
-            user="postgres",
-            password=os.getenv("PASSWORD"),
-            host="localhost",
-            port=5432
-
+            host=os.getenv("DB_HOST"),
+            port=os.getenv("DB_PORT"),
+            dbname=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD"),
         )
 
     def init(self):
