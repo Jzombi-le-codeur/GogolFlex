@@ -30,6 +30,7 @@ class Crawler:
             "Cookie": "CONSENT=YES+; SOCS=CAI",
             "Accept-Encoding": "gzip"
         }
+        self.running = True
 
         # URLs
         self.queue = asyncio.Queue()
@@ -116,7 +117,7 @@ class Crawler:
                 await db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_links_target_url ON page_links(target_url)")
                 await conn.commit()
 
-                # Load queue if there are urls in db's queue
+                # Load queue if there are not urls in db's queue
                 if not await self.__check_if_db_is_empty():
                     async with self.queue_lock:
                         self.queue = asyncio.Queue()
@@ -129,6 +130,9 @@ class Crawler:
                 # Get queue
                 queue = list()
                 while not queue:
+                    if not self.running:
+                        return
+
                     await db_cursor.execute(f"""
                     SELECT q.id, q.url, q.domain
                     FROM queue q
@@ -353,11 +357,17 @@ class Crawler:
 
     async def __run(self, session):
         # Load queue if queue is empty
-        if self.queue.empty():
+        if self.queue.empty() and self.running:
             await self.__load_queue()
 
+        if not self.running:
+            return
+
         # Get URL
-        url = await self.queue.get()  # Get URl and delete it
+        try:
+            url = await asyncio.wait_for(self.queue.get(), timeout=1.0)
+        except asyncio.TimeoutError:
+            return
 
         print(f"URl de la page : {url}")
         print(f"Nombre de sites à visiter : {self.queue.qsize()}")
@@ -397,11 +407,9 @@ class Crawler:
         await asyncio.sleep(0.1)
 
     async def run_crawler(self, i: int = 0):
-
         async with aiohttp.ClientSession() as session:
             if i == 0:
-                running = True
-                while running:
+                while self.running:
                     a = time.time()
                     await self.__run(session=session)
                     print("TEMPS :", time.time() - a)
@@ -409,7 +417,11 @@ class Crawler:
 
             else:
                 for _ in range(i):
-                    await self.__run(session=session)
+                    if self.running:
+                        await self.__run(session=session)
+
+                    else:
+                        break
 
     async def run(self, n_crawlers: int, i: int = 0):
         try:
