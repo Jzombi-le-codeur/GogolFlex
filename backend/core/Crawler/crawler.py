@@ -2,7 +2,6 @@ import time
 import urllib.parse
 from urllib.parse import urlparse
 from urllib.robotparser import RobotFileParser
-from aiohttp import set_zlib_backend
 from bs4 import BeautifulSoup
 import re
 from datetime import datetime, timezone
@@ -24,6 +23,7 @@ import time
 class Crawler:
     def __init__(self):
         # Bot Informations
+        load_dotenv(encoding="utf-8")
         self.name = "GogolFlexBot"
         self.headers = {
             "User-Agent": f"{self.name}/1.0 ( jirasak.habrias@gmail.com)",
@@ -40,9 +40,13 @@ class Crawler:
         self.robots_txt = RobotsTxt(crawler=self)
 
         # DB connection
-        load_dotenv(encoding="utf-8")
         self.n_crawlers = int()
         self.pool = None
+
+        # Paths
+        self.datas_path = pathlib.PurePath(os.getenv("DATAS_PATH"))
+        self.pages_path = pathlib.Path(self.datas_path, pathlib.Path("Pages"))
+        self.robots_txt_path = pathlib.Path(self.datas_path, pathlib.Path("RobotsTXT"))
 
     async def __check_if_db_is_empty(self):
         async with self.pool.connection() as conn:
@@ -224,7 +228,7 @@ class Crawler:
                 # Set this site in visited domains
                 timestamp = datetime.now(timezone.utc)
                 extracted = tldextract.extract(url)
-                domain = str(extracted.domain)
+                domain = f"{extracted.domain}.{extracted.suffix}"
                 await db_cursor.execute(
                     """
                     INSERT INTO visited_domains (url, crawl_delay, last_visit)
@@ -315,7 +319,7 @@ class Crawler:
 
                     url = f"{parsed_url.scheme}://{parsed_url.netloc}{url_path}".rstrip('/')
                     extracted = tldextract.extract(url)
-                    domain = str(extracted.domain)
+                    domain = f"{extracted.domain}.{extracted.suffix}"
                     urls.append((url, domain,))
                     links_relations.append((page_url, url))
 
@@ -335,7 +339,7 @@ class Crawler:
         # Create page's file's information
         page_filename = f"{hashlib.blake2b(url.encode("utf-8"), digest_size=16).hexdigest()}.html"  # Filename : hashed page's url
         print("FILENAME :", page_filename)
-        page_filepath = pathlib.PurePath(pathlib.Path("Pages"), page_filename[:2], page_filename)
+        page_filepath = pathlib.PurePath(self.pages_path, page_filename[:2], page_filename)
 
         # Create Directory if it doesn't exist
         if not os.path.exists(os.path.dirname(page_filepath)):
@@ -354,23 +358,6 @@ class Crawler:
 
         # Get URL
         url = await self.queue.get()  # Get URl and delete it
-
-        # Check if URL is in delay
-        # extracted = tldextract.extract(url)
-        # domain = f"{extracted.domain}.{extracted.suffix}"
-        # async with self.pool.connection() as conn:
-        #     async with conn.cursor() as db_cursor:
-        #         await db_cursor.execute("""
-        #         SELECT 1 FROM visited_domains
-        #         WHERE url = %s
-        #         AND last_visit + (crawl_delay * INTERVAL '1 second') > NOW()
-        #         """, (domain,))
-        #         too_soon = await db_cursor.fetchone()
-        #
-        # if too_soon:
-        #     await self.queue.put(url)  # Remet en queue
-        #     await asyncio.sleep(0.1)
-        #     return
 
         print(f"URl de la page : {url}")
         print(f"Nombre de sites à visiter : {self.queue.qsize()}")
@@ -445,13 +432,15 @@ class RobotsTxt:
         self.headers = self.crawler.headers
 
         # Create RobotsTXT folder
-        os.makedirs("RobotsTXT") if not os.path.exists("RobotsTXT") else None
+        self.datas_path = pathlib.PurePath(os.getenv("DATAS_PATH"))
+        self.robots_txt_path = pathlib.Path(self.datas_path, pathlib.Path("RobotsTXT"))
+        os.makedirs(self.robots_txt_path) if not os.path.exists(self.robots_txt_path) else None
 
         self.default_crawl_delay = 1
 
     async def __get_robots_txt_file(self, url_base: urllib.parse.ParseResult, session):
         s = time.time()
-        robots_txt_filepath = pathlib.PurePath("RobotsTXT", f"{url_base.netloc}.txt")
+        robots_txt_filepath = pathlib.PurePath(self.robots_txt_path, f"{url_base.netloc}.txt")
         if os.path.exists(robots_txt_filepath):
             async with aiofiles.open(robots_txt_filepath, "r", encoding="utf-8") as robots_txt_file:
                 robots_txt_file_content = await robots_txt_file.read()

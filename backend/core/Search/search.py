@@ -23,7 +23,7 @@ class Searcher:
     def __search(self, query: str, n_results: int):
         # Split query into many terms
         query = query.split()
-        query = [self.__normalize(t) for t in query]
+        query = [self.__normalize(t.lower()) for t in query]
 
         # Build SQL query
         sql_query = ["SELECT page_id FROM inverted_index WHERE word = %s" for _ in query]

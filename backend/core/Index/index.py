@@ -11,13 +11,15 @@ import unicodedata
 
 class Indexer:
     def __init__(self):
+        # Indexer's Informations
+        load_dotenv(encoding="utf-8")
         self.db_timeout = 30
         self.pages_informations = []
         self.page_informations = {"id": int(), "url": str(), "page_filename": str(), "title": str()}
         self.page_text = str()
         self.frequencies = dict()
 
-        load_dotenv(encoding="utf-8")
+        # DB
         self.db = psycopg.connect(
             host=os.getenv("DB_HOST"),
             port=os.getenv("DB_PORT"),
@@ -25,6 +27,10 @@ class Indexer:
             user=os.getenv("DB_USER"),
             password=os.getenv("DB_PASSWORD"),
         )
+
+        # Paths
+        self.datas_path = pathlib.PurePath(os.getenv("DATAS_PATH"))
+        self.pages_path = pathlib.Path(self.datas_path, pathlib.Path("Pages"))
 
     def init(self):
         with self.db.cursor() as db_cursor:
@@ -70,7 +76,7 @@ class Indexer:
 
     def __get_page_code(self):
         # Get page code
-        page_path = pathlib.PurePath("Pages", self.page_informations["page_filename"][:2],
+        page_path = pathlib.PurePath(self.pages_path, self.page_informations["page_filename"][:2],
                                      self.page_informations["page_filename"])
         with open(page_path, "r", encoding="utf-8") as page_file:
             page_code = BeautifulSoup(page_file.read(), features="html.parser")

@@ -8,12 +8,14 @@ from dotenv import load_dotenv
 
 class Parser:
     def __init__(self):
+        # Parser's informations
+        load_dotenv(encoding="utf-8")
         self.db_timeout = 30
         self.pages_informations = []  # {"id": int(), "url": str(), "page_filename": str(), "title": str()}
         self.page_informations = {"id": int(), "url": str(), "page_filename": str(), "title": str()}
         self.page_code = BeautifulSoup()
 
-        load_dotenv()
+        # DBs
         self.db = psycopg.connect(
             host=os.getenv("DB_HOST"),
             port=os.getenv("DB_PORT"),
@@ -21,6 +23,11 @@ class Parser:
             user=os.getenv("DB_USER"),
             password=os.getenv("DB_PASSWORD"),
         )
+
+        # Paths
+        self.datas_path = pathlib.PurePath(os.getenv("DATAS_PATH"))
+        self.pages_path = pathlib.Path(self.datas_path, pathlib.Path("Pages"))
+        self.robots_txt_path = pathlib.Path(self.datas_path, pathlib.Path("RobotsTXT"))
 
     def init(self):
         with self.db.cursor() as db_cursor:
@@ -61,7 +68,7 @@ class Parser:
 
     def __get_page_code(self):
         # Get page code
-        page_filepath = pathlib.PurePath("Pages", self.page_informations["page_filename"][:2],
+        page_filepath = pathlib.PurePath(self.pages_path, self.page_informations["page_filename"][:2],
                                          self.page_informations["page_filename"])
         with open(page_filepath, encoding="utf-8") as page_file:
             self.page_code = BeautifulSoup(page_file.read(), features="html.parser")
