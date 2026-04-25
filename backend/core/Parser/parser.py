@@ -14,6 +14,7 @@ class Parser:
         self.pages_informations = []  # {"id": int(), "url": str(), "page_filename": str(), "title": str()}
         self.page_informations = {"id": int(), "url": str(), "page_filename": str(), "title": str()}
         self.page_code = BeautifulSoup()
+        self.running = False
 
         # DBs
         self.db = psycopg.connect(
@@ -151,8 +152,11 @@ class Parser:
 
     def __run(self):
         # Get basic pages' information (url, index, pagepath)
-        if not self.pages_informations:
+        if not self.pages_informations and self.running:
             self.__get_crawl_results()
+
+        if not self.running:
+            return
 
         # Get page's informations
         self.page_informations = self.pages_informations.pop(0)
@@ -174,13 +178,16 @@ class Parser:
             self.init()
 
             if i == 0:
-                running = True
-                while running:
+                while self.running:
                     self.__run()
 
             else:
                 for _ in range(i):
-                    self.__run()
+                    if self.running:
+                        self.__run()
+
+                    else:
+                        break
 
         finally:
             self.db.close()

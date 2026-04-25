@@ -34,7 +34,7 @@ class Crawler:
 
         # URLs
         self.queue = asyncio.Queue()
-        [self.queue.put_nowait(u) for u in ["https://fr.wikipedia.org/wiki/Wikip%C3%A9dia:Accueil_principal", "https://nicot3m.pages-perso.free.fr/", "https://fr.wikihow.com/Accueil"]]
+        [self.queue.put_nowait(u) for u in ["https://fr.wikipedia.org/wiki/Wikip%C3%A9dia:Accueil_principal", "https://fr.wikihow.com/Accueil"]]
         self.queue_lock = asyncio.Lock()
 
         # Robots.txt
