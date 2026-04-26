@@ -7,17 +7,17 @@ export default function Admin() {
         {
             "name": "Crawler",
             "description": "Explore the web to find new webpages",
-            "status": "Paused"
+            "status": "Stopped"
         },
         {
             "name": "Parser",
             "description": "Parse found page's informations",
-            "status": "Paused"
+            "status": "Stopped"
         },
         {
             "name": "Indexer",
             "description": "Save found pages in GogolFlex's Database",
-            "status": "Paused"
+            "status": "Stopped"
         },
     ]);
 
@@ -27,7 +27,7 @@ export default function Admin() {
         // Get API's url
         const host = process.env[`REACT_APP_${name.toUpperCase()}_API_HOST`]
         const port = process.env[`REACT_APP_${name.toUpperCase()}_API_PORT`]
-        const action = status === "Running" ? "start" : "stop";
+        const action = status === "Running" ? "start" : status === "Paused" ? "stop" : "shutdown";
         const url = `http://${host}:${port}/${action}`;
 
         // Request to API

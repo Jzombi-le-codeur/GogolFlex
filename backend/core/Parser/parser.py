@@ -17,6 +17,14 @@ class Parser:
         self.running = False
 
         # DBs
+        self.db = None
+
+        # Paths
+        self.datas_path = pathlib.PurePath(os.getenv("DATAS_PATH"))
+        self.pages_path = pathlib.Path(self.datas_path, pathlib.Path("Pages"))
+        self.robots_txt_path = pathlib.Path(self.datas_path, pathlib.Path("RobotsTXT"))
+
+    def init(self):
         self.db = psycopg.connect(
             host=os.getenv("DB_HOST"),
             port=os.getenv("DB_PORT"),
@@ -25,12 +33,6 @@ class Parser:
             password=os.getenv("DB_PASSWORD"),
         )
 
-        # Paths
-        self.datas_path = pathlib.PurePath(os.getenv("DATAS_PATH"))
-        self.pages_path = pathlib.Path(self.datas_path, pathlib.Path("Pages"))
-        self.robots_txt_path = pathlib.Path(self.datas_path, pathlib.Path("RobotsTXT"))
-
-    def init(self):
         with self.db.cursor() as db_cursor:
             db_cursor.execute("""
             CREATE TABLE IF NOT EXISTS page_informations (

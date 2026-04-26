@@ -18,8 +18,16 @@ class Indexer:
         self.page_informations = {"id": int(), "url": str(), "page_filename": str(), "title": str()}
         self.page_text = str()
         self.frequencies = dict()
+        self.running = False
 
         # DB
+        self.db = None
+
+        # Paths
+        self.datas_path = pathlib.PurePath(os.getenv("DATAS_PATH"))
+        self.pages_path = pathlib.Path(self.datas_path, pathlib.Path("Pages"))
+
+    def init(self):
         self.db = psycopg.connect(
             host=os.getenv("DB_HOST"),
             port=os.getenv("DB_PORT"),
@@ -28,11 +36,6 @@ class Indexer:
             password=os.getenv("DB_PASSWORD"),
         )
 
-        # Paths
-        self.datas_path = pathlib.PurePath(os.getenv("DATAS_PATH"))
-        self.pages_path = pathlib.Path(self.datas_path, pathlib.Path("Pages"))
-
-    def init(self):
         with self.db.cursor() as db_cursor:
             db_cursor.execute("""
             CREATE TABLE IF NOT EXISTS inverted_index (
@@ -262,9 +265,8 @@ class Indexer:
             self.init()
 
             if i == 0:
-                running = True
                 j = 0
-                while running:
+                while self.running:
                     j += 1
                     self.__run()
                     if j % i_bfr_tf_idf == 0:
@@ -273,10 +275,14 @@ class Indexer:
             else:
                 j = 0
                 for _ in range(i):
-                    j += 1
-                    self.__run()
-                    if j % i_bfr_tf_idf == 0:
-                        self.calculate_score()
+                    if self.running:
+                        j += 1
+                        self.__run()
+                        if j % i_bfr_tf_idf == 0:
+                            self.calculate_score()
+
+                    else:
+                        break
 
         finally:
             self.db.close()

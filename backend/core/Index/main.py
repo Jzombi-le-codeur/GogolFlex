@@ -5,6 +5,8 @@ import uvicorn
 from dotenv import load_dotenv
 from index import Indexer
 import asyncio
+from starlette.background import BackgroundTasks
+import signal
 
 
 load_dotenv(encoding="utf-8")
@@ -46,6 +48,11 @@ def stop():
         return {"response": "indexers stopped"}
     else:
         return {"response": "No indexer is running"}
+
+@app.get("/shutdown")
+def shutdown(background_tasks: BackgroundTasks):
+    background_tasks.add_task(lambda: (asyncio.sleep(2), os.kill(os.getpid(), signal.SIGTERM)))
+    return {"response": "Serveur arrêté"}
 
 
 if __name__ == "__main__":

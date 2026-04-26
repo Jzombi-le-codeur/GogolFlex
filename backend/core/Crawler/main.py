@@ -2,11 +2,12 @@ import selectors
 import asyncio
 import os
 import sys
-
+import signal
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from pydantic import BaseModel
+from starlette.background import BackgroundTasks
 from crawler import Crawler
 from dotenv import load_dotenv
 
@@ -60,6 +61,12 @@ def stop():
         return {"response": "Crawlers stopped"}
     else:
         return {"response": "No crawler is running"}
+
+@app.get("/shutdown")
+def shutdown(background_tasks: BackgroundTasks):
+    stop()
+    background_tasks.add_task(lambda: (asyncio.sleep(2), os.kill(os.getpid(), signal.SIGTERM)))
+    return {"response": "Serveur arrêté"}
 
 
 if __name__ == "__main__":
