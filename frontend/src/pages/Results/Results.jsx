@@ -2,6 +2,7 @@ import React from "react";
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import Searchbar from "../../components/searchbar/Searchbar";
+import "../../styles/results.css";
 
 export default function Results() {
     const [searchParams] = useSearchParams();

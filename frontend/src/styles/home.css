@@ -1,0 +1,42 @@
+.page.search {
+    display: flex;
+    padding: 15dvh;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+}
+
+@media (max-width: 768px) {
+    .page.search {
+        padding: 15dvh;
+        margin: 0;
+        max-width: 768px;
+    }
+}
+
+.search-bar {
+    margin-top: 0.75dvh;
+}
+
+@media (max-width: 768px) {
+    .search-bar {
+        width: min(80vw); /* ← contrainte la largeur sur mobile */
+    }
+}
+
+.page.search .title, .page.search .title a {
+    text-align: center;
+    font-size: 3.5rem;
+}
+
+@media (max-width: 768px) {
+    .page.search .title, .page.search .title a {
+        text-align: center;
+        font-size: 3rem;
+    }
+}
+
+.main {
+    display: flex;
+    flex-direction: column;
+}

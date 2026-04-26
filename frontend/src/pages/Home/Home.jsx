@@ -2,6 +2,7 @@ import React from "react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import Searchbar from "../../components/searchbar/Searchbar";
+import "../../styles/home.css";
 
 export default function Home() {
     const [query, setQuery] = useState("");
@@ -12,7 +13,7 @@ export default function Home() {
     }
 
     return (
-        <div className="page">
+        <div className="page search">
             {/*<h1 className="title title1"><a href="..">GogolFlex</a></h1>*/}
             <h1 className="title title2"><a href="..">GogolFlex</a></h1>
             <div className="main">

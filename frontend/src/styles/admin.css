@@ -1,0 +1,21 @@
+.page.admin {
+    min-height: 100vh;
+    padding: 1dvh 0 0 1dvh;
+    display: flex;
+    flex-direction: column;
+}
+
+header.admin {
+    display: flex;
+    flex-direction: row;
+    gap: 0.25rem
+}
+
+.services.admin {
+    display: flex;
+    justify-content: center;
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 1rem;
+    align-items: stretch;
+}
