@@ -13,7 +13,8 @@ export default function Home() {
 
     return (
         <div className="page">
-            <h1 className="title"><a href="..">GogolFlex</a></h1>
+            {/*<h1 className="title title1"><a href="..">GogolFlex</a></h1>*/}
+            <h1 className="title title2"><a href="..">GogolFlex</a></h1>
             <div className="main">
                 <Searchbar search={search} query={query} setQuery={setQuery} />
             </div>

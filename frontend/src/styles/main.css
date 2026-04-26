@@ -3,6 +3,24 @@ html, body {
     background: linear-gradient(#ededed 30%, #c5c5c5 100%);
 }
 
+@font-face {
+    font-family: 'Montserrat';
+    src: url("/public/fonts/montserrat/Montserrat-VariableFont_wght.ttf") format("truetype");
+}
+
+@font-face {
+    font-family: 'Inter';
+    src: url("/public/fonts/inter/Inter-VariableFont_opsz,wght.ttf") format("truetype");
+}
+
+h1 {
+    font-family: "Montserrat", sans-serif;
+}
+
+p, input {
+    font-family: "Inter", sans-serif;
+}
+
 .page {
     height: 100dvh;
     display: flex;
@@ -85,7 +103,7 @@ html, body {
     margin: 0;
     color: #3366cc;
     text-decoration: none;
-    font-size: 1.5rem;
+    font-size: 1.25rem;
 }
 
 .result-url {
