@@ -22,12 +22,31 @@ export default function Admin() {
     ]);
 
     const changeStatus = (name, status) => {
-        setServices(
-            prev =>
-                prev.map(service => (
-                    service.name === name ? { ...service, status: status } : service
-                ))
-        )
+        let error = false;
+
+        // Get API's url
+        const host = process.env[`REACT_APP_${name.toUpperCase()}_API_HOST`]
+        const port = process.env[`REACT_APP_${name.toUpperCase()}_API_PORT`]
+        const action = status === "Running" ? "start" : "stop";
+        const url = `http://${host}:${port}/${action}`;
+
+        // Request to API
+        fetch(url, {
+            method: "GET",
+        })
+        .then(res => res.json())
+        .then(data => {console.log(data)})
+        .catch(err => error = true);
+
+        // Update service
+        if (!error) {
+            setServices(
+                prev =>
+                    prev.map(service => (
+                        service.name === name ? { ...service, status: status } : service
+                    ))
+            )
+        }
     }
 
     return (

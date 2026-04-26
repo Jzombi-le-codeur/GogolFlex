@@ -43,6 +43,7 @@ def set_queue(payload: Queue):
 
 @app.get("/start")
 async def start():
+    print("test")
     if not app.state.crawler_running:
         app.state.crawler.running = True
         app.state.crawler_running = True

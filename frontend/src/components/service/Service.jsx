@@ -4,7 +4,7 @@ export default function Service({ name, description, status, changeStatus }) {
     return (
         <div className="service">
             <div className="service-informations">
-                <p className="service-information service-status ${status.toLocaleLowerCase()}">{`STATUS : ${status}`}</p>
+                <p className="service-information service-status">{`STATUS : ${status}`}</p>
                 <h2 className="service-information service-name">{name}</h2>
                 <p className="service-information service-description">{description}</p>
             </div>
