@@ -1,11 +1,11 @@
 import os
-import time
 from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from dotenv import load_dotenv
-from parser import Parser
+from index import Indexer
 import asyncio
+import time
 import signal
 import pathlib
 
@@ -17,8 +17,8 @@ load_dotenv(
 )
 
 app = FastAPI()
-app.state.parser = Parser()
-app.state.parser_running = False
+app.state.indexer = Indexer()
+app.state.indexer_running = False
 
 origins = ["*"]
 app.add_middleware(
@@ -32,35 +32,35 @@ app.add_middleware(
 
 @app.get("/")
 def main():
-    return {"response": "Welcome to Parser's API"}
+    return {"response": "Welcome to indexer's API"}
 
 @app.get("/get-status")
 def get_status():
-    if app.state.parser_running:
-        return {"response": "Parser.s are running", "status": "Running"}
+    if app.state.indexer_running:
+        return {"response": "Indexer.s are running", "status": "Running"}
 
     else:
-        return {"response": "No parser is running", "status": "Paused"}
+        return {"response": "No indexer is running", "status": "Paused"}
 
 @app.get("/start")
 async def start():
-    if not app.state.parser_running:
-        app.state.parser.running = True
-        app.state.parser_running = True
+    if not app.state.indexer_running:
+        app.state.indexer.running = True
+        app.state.indexer_running = True
         loop = asyncio.get_event_loop()
-        loop.run_in_executor(None, app.state.parser.run)
-        return {"response": "Launched parser", "status": "Running"}
+        loop.run_in_executor(None, app.state.indexer.run)
+        return {"response": "Launched indexer", "status": "Running"}
     else:
-        return {"response": "Parser.s are already running", "status": "Running"}
+        return {"response": "Indexer already running", "status": "Running"}
 
 @app.get("/pause")
 def pause():
-    if app.state.parser_running:
-        app.state.parser.running = False
-        app.state.parser_running = False
-        return {"response": "Parser.s paused", "status": "Paused"}
+    if app.state.indexer_running:
+        app.state.indexer.running = False
+        app.state.indexer_running = False
+        return {"response": "Indexers paused", "status": "Paused"}
     else:
-        return {"response": "No parser is running", "status": "Paused"}
+        return {"response": "No indexer is running", "status": "Paused"}
 
 @app.get("/stop")
 def stop(background_task: BackgroundTasks):

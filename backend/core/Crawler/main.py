@@ -10,9 +10,15 @@ from crawler import Crawler
 from dotenv import load_dotenv
 import signal
 import time
+import pathlib
 
 
-load_dotenv(encoding="utf-8")
+print(pathlib.Path(__file__).parent / ".env")
+load_dotenv(
+    dotenv_path=pathlib.Path(__file__).parent / ".env",
+    encoding="utf-8",
+    override=True
+)
 
 app = FastAPI()
 app.state.crawler = Crawler()

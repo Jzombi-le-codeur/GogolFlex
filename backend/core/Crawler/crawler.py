@@ -410,10 +410,15 @@ class Crawler:
         async with aiohttp.ClientSession() as session:
             if i == 0:
                 while self.running:
-                    a = time.time()
-                    await self.__run(session=session)
-                    print("TEMPS :", time.time() - a)
-                    print("________________________________________")
+                    try:
+                        a = time.time()
+                        await self.__run(session=session)
+                        print("TEMPS :", time.time() - a)
+                        print("________________________________________")
+
+                    except psycopg.errors.DeadlockDetected:
+                        await asyncio.sleep(0.5)
+                        continue
 
             else:
                 for _ in range(i):

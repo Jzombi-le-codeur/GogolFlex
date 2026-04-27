@@ -1,3 +1,5 @@
+import pathlib
+import subprocess
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
@@ -6,6 +8,9 @@ import psycopg
 from dotenv import load_dotenv
 import os
 import unicodedata
+import requests
+import sys
+import psutil
 
 
 load_dotenv()
@@ -20,9 +25,18 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+services_api_status = {
+    "crawler": False,
+    "parser": False,
+    "indexer": False
+}
+
 class SearchRequest(BaseModel):
     query: str
     n_results: int
+
+class RunServiceRequest(BaseModel):
+    name: str
 
 
 def __normalize(text):
@@ -82,5 +96,57 @@ def search(request: SearchRequest):
     results_ = [{"title": title, "url": url} for url, title, _ in results]
     return {"results": results_}
 
+@app.post("/run-service")
+def run(service: RunServiceRequest):
+    service_name = service.name
+
+    # Detect if api is in container
+    if pathlib.Path("/.dockerenv").exists():
+        # Dans un container docker
+        pass
+
+    else:
+        # Hors d'un container docker
+        service_script_path = pathlib.Path(f"../core/{service_name}/main.py").absolute()
+        # service_script_path_ = str(service_script_path).replace("\\", "\\\\")
+
+        # Detect if api is launched
+        api_launched = False
+        if sys.platform == "win32":
+            api_launched = any(
+                str(service_script_path) in " ".join(p.info["cmdline"] or [])
+                for p in psutil.process_iter(["cmdline"])
+            )
+
+        else:
+            result = subprocess.run(["pgrep", "-f", "python main.py"], capture_output=True)
+            api_launched = result.returncode == 0
+
+        # Launch API
+        if not api_launched:
+            # Get Venv's python
+            if sys.platform == "win32":
+                venv_python = pathlib.Path(service_script_path.parent, ".venv", "Scripts", "python.exe").absolute()
+
+            else:
+                venv_python = pathlib.Path(service_script_path.parent, ".venv", "Scripts", "python").absolute()
+
+            result = subprocess.Popen([str(venv_python), str(service_script_path)])
+
+        else:
+            return {"response": f"API is already running"}
+
+        # Start service
+        try:
+            response = requests.get(f"http://{os.getenv(f"{service_name.upper()}_API_HOST")}:{os.getenv(f"{service_name.upper()}_API_PORT")}/start")
+            if response.json()["status"] != "Running":
+                return {"response": f"Failed to start {service_name}'s API"}
+
+        except requests.RequestException:
+            return {"response": f"Failed to start {service_name}'s API"}
+
+        return {"response": f"Started {service_name}'s API", "status": "Running"}
+
+
 if __name__ == "__main__":
-    uvicorn.run("main:app", host=os.getenv("HOST"), port=int(os.getenv("PORT")), reload=True)
+    uvicorn.run("main:app", host=os.getenv("HOST"), port=int(os.getenv("PORT")))
