@@ -34,12 +34,17 @@ export default function Admin() {
     const doAction = (name, button) => {
         // Get status
         return getStatus(name).then(status => {
-            console.log(status);
 
             // Get API's url
             if (status === "Stopped") {
-                console.log("Sorry, API is Stopped");
-                return "Stopped"
+                return fetch(`http://${process.env.REACT_APP_API_HOST}:${process.env.REACT_APP_API_PORT}/run-service`, {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({"name": name}),
+                })
+                    .then(res => res.json())
+                    .then(data => data.status ?? "Stopped")
+                    .catch(err => "Stopped");
             } else {
                 const host = process.env[`REACT_APP_${name.toUpperCase()}_API_HOST`]
                 const port = process.env[`REACT_APP_${name.toUpperCase()}_API_PORT`]

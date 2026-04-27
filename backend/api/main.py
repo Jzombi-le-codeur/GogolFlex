@@ -97,7 +97,7 @@ def search(request: SearchRequest):
     return {"results": results_}
 
 @app.post("/run-service")
-def run(service: RunServiceRequest):
+def run_service(service: RunServiceRequest):
     service_name = service.name
 
     # Detect if api is in container
