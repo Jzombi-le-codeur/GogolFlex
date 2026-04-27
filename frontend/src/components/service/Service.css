@@ -50,28 +50,27 @@
     transition: transform 0.2s ease;
 }
 
-.service-button.pause.running {
-    background-color: #ff8000;
-}
-
-.service-button.pause.paused, .service-button.pause.stopped {
-    background-color: #00d306;
-}
-
-.service-button.off {
-    background-color: red;
-}
-
-.service-button.off.disabled {
-    background-color: #5c0000;
-}
-
 .service-button:hover {
     cursor: pointer;
     transform: scale(1.1);
 }
+.main-button.running {
+    background-color: #ff8000;
+}
 
-.service-button.disabled:hover {
+.main-button.paused, .main-button.stopped {
+    background-color: #00d306;
+}
+
+.stop-button {
+    background-color: red;
+}
+
+.stop-button.disabled {
+    background-color: #730000;
+}
+
+.stop-button.disabled:hover {
     cursor: default;
-    transform: scale(1);
+    transform: scale(1.0);
 }

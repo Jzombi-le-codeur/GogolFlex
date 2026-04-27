@@ -1,11 +1,11 @@
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from dotenv import load_dotenv
 from index import Indexer
 import asyncio
-from starlette.background import BackgroundTasks
+import time
 import signal
 
 
@@ -29,6 +29,14 @@ app.add_middleware(
 def main():
     return {"response": "Welcome to indexer's API"}
 
+@app.get("/get-status")
+def get_status():
+    if app.state.indexer_running:
+        return {"response": "Indexer.s are running", "status": "Running"}
+
+    else:
+        return {"response": "No indexer is running", "status": "Paused"}
+
 @app.get("/start")
 async def start():
     if not app.state.indexer_running:
@@ -36,23 +44,24 @@ async def start():
         app.state.indexer_running = True
         loop = asyncio.get_event_loop()
         loop.run_in_executor(None, app.state.indexer.run)
-        return {"response": "Launched indexer"}
+        return {"response": "Launched indexer", "status": "Running"}
     else:
-        return {"response": "indexer already running"}
+        return {"response": "Indexer already running", "status": "Running"}
 
-@app.get("/stop")
-def stop():
+@app.get("/pause")
+def pause():
     if app.state.indexer_running:
         app.state.indexer.running = False
         app.state.indexer_running = False
-        return {"response": "indexers stopped"}
+        return {"response": "Indexers paused", "status": "Paused"}
     else:
-        return {"response": "No indexer is running"}
+        return {"response": "No indexer is running", "status": "Paused"}
 
-@app.get("/shutdown")
-def shutdown(background_tasks: BackgroundTasks):
-    background_tasks.add_task(lambda: (asyncio.sleep(2), os.kill(os.getpid(), signal.SIGTERM)))
-    return {"response": "Serveur arrêté"}
+@app.get("/stop")
+def stop(background_task: BackgroundTasks):
+    pause()
+    background_task.add_task(lambda: (time.sleep(3), os.kill(os.getpid(), signal.SIGTERM)))
+    return {"response": "API Stopped", "status": "Stopped"}
 
 
 if __name__ == "__main__":

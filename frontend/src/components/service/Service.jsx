@@ -1,6 +1,13 @@
 import "./Service.css";
+import { useEffect, useState } from "react";
 
-export default function Service({ name, description, status, changeStatus }) {
+export default function Service({ name, description, getStatus, doAction }) {
+    const [status, setStatus] = useState("Stopped");
+
+    useEffect(() => {
+        getStatus(name).then(status => {console.log(status); setStatus(status)});
+    }, [name, getStatus]);
+
     return (
         <div className="service">
             <div className="service-informations">
@@ -10,15 +17,13 @@ export default function Service({ name, description, status, changeStatus }) {
             </div>
             <div className="service-actions">
                 <button
-                    className={`service-button pause ${status.toLocaleLowerCase()}`}
-                    onClick={
-                        () => (
-                            status === "Paused" || status === "Stopped" ? changeStatus(name, "Running") : changeStatus(name, "Paused")
-                        )
-                    }
+                    className={`service-button main-button ${status.toLowerCase()}`}
+                    onClick={ () => {
+                        doAction(name, "Main").then(s => setStatus(s));
+                    }}
                 >
                     {
-                        status === "Paused" || status === "Stopped" ? (
+                        status === "Stopped" || status === "Paused" ? (
                             <svg width="16" height="16" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
                                 <polygon
                                     points="30,20 75,50 30,80"
@@ -38,13 +43,13 @@ export default function Service({ name, description, status, changeStatus }) {
                     }
                 </button>
                 <button
-                    className={`service-button off ${status === "Stopped" ? "disabled" : ""}`}
-                    onClick={
-                        () => changeStatus(name, "Stopped")
-                    }
+                    className={`service-button stop-button ${status.toLowerCase()} ${status === "Stopped" ? "disabled" : ""}`}
+                    onClick={ () => {
+                        doAction(name, "Stop", status).then(s => setStatus(s));
+                    }}
                     disabled={status === "Stopped"}
                 >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <rect x="6" y="6" width="12" height="12" rx="2" fill="white"/>
                     </svg>
                 </button>

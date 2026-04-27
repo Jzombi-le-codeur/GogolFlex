@@ -1,12 +1,12 @@
 import os
-from fastapi import FastAPI
+import time
+from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from dotenv import load_dotenv
 from parser import Parser
 import asyncio
 import signal
-from starlette.background import BackgroundTasks
 
 
 load_dotenv(encoding="utf-8")
@@ -29,6 +29,14 @@ app.add_middleware(
 def main():
     return {"response": "Welcome to Parser's API"}
 
+@app.get("/get-status")
+def get_status():
+    if app.state.parser_running:
+        return {"response": "Parser.s are running", "status": "Running"}
+
+    else:
+        return {"response": "No parser is running", "status": "Paused"}
+
 @app.get("/start")
 async def start():
     if not app.state.parser_running:
@@ -36,23 +44,24 @@ async def start():
         app.state.parser_running = True
         loop = asyncio.get_event_loop()
         loop.run_in_executor(None, app.state.parser.run)
-        return {"response": "Launched parser"}
+        return {"response": "Launched parser", "status": "Running"}
     else:
-        return {"response": "Parser already running"}
+        return {"response": "Parser.s are already running", "status": "Running"}
 
-@app.get("/stop")
-def stop():
+@app.get("/pause")
+def pause():
     if app.state.parser_running:
         app.state.parser.running = False
         app.state.parser_running = False
-        return {"response": "parsers stopped"}
+        return {"response": "Parser.s paused", "status": "Paused"}
     else:
-        return {"response": "No parser is running"}
+        return {"response": "No parser is running", "status": "Paused"}
 
-@app.get("/shutdown")
-def shutdown(background_tasks: BackgroundTasks):
-    background_tasks.add_task(lambda: (asyncio.sleep(2), os.kill(os.getpid(), signal.SIGTERM)))
-    return {"response": "Serveur arrêté"}
+@app.get("/stop")
+def stop(background_task: BackgroundTasks):
+    pause()
+    background_task.add_task(lambda: (time.sleep(3), os.kill(os.getpid(), signal.SIGTERM)))
+    return {"response": "API Stopped", "status": "Stopped"}
 
 
 if __name__ == "__main__":

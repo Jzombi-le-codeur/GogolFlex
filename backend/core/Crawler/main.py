@@ -2,14 +2,15 @@ import selectors
 import asyncio
 import os
 import sys
-import signal
-from fastapi import FastAPI
+from fastapi import FastAPI, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from pydantic import BaseModel
-from starlette.background import BackgroundTasks
 from crawler import Crawler
 from dotenv import load_dotenv
+import signal
+import time
+
 
 load_dotenv(encoding="utf-8")
 
@@ -33,6 +34,14 @@ class Queue(BaseModel):
 def main():
     return {"response": "Welcome to the Crawler's API"}
 
+@app.get("/get-status")
+def get_status():
+    if app.state.crawler_running:
+        return {"response": "Crawler.s are running", "status": "Running"}
+
+    else:
+        return {"response": "No crawler is running", "status": "Paused"}
+
 @app.post("/set-queue")
 def set_queue(payload: Queue):
     if not app.state.crawler_running:
@@ -40,7 +49,7 @@ def set_queue(payload: Queue):
             app.state.crawler.queue.put_nowait(url)
         return {"response": "Queue set"}
     else:
-        return {"response": "Can't change queue when crawlers are running"}
+        return {"response": "Can't change queue when crawler.s are running"}
 
 @app.get("/start")
 async def start():
@@ -49,24 +58,24 @@ async def start():
         app.state.crawler.running = True
         app.state.crawler_running = True
         asyncio.create_task(app.state.crawler.run(n_crawlers=5))
-        return {"response": "Launched crawlers"}
+        return {"response": "Launched crawler.s", "status": "Running"}
     else:
-        return {"response": "Crawlers are already running"}
+        return {"response": "Crawler.s are already running", "status": "Running"}
 
-@app.get("/stop")
-def stop():
+@app.get("/pause")
+def pause():
     if app.state.crawler_running:
         app.state.crawler.running = False
         app.state.crawler_running = False
-        return {"response": "Crawlers stopped"}
+        return {"response": "Crawler.s paused", "status": "Paused"}
     else:
-        return {"response": "No crawler is running"}
+        return {"response": "No crawler is running", "status": "Paused"}
 
-@app.get("/shutdown")
-def shutdown(background_tasks: BackgroundTasks):
-    stop()
-    background_tasks.add_task(lambda: (asyncio.sleep(2), os.kill(os.getpid(), signal.SIGTERM)))
-    return {"response": "Serveur arrêté"}
+@app.get("/stop")
+def stop(background_task: BackgroundTasks):
+    pause()
+    background_task.add_task(lambda: (time.sleep(2), os.kill(os.getpid(), signal.SIGTERM)))
+    return {"response": "API Stopped", "status": "Stopped"}
 
 
 if __name__ == "__main__":

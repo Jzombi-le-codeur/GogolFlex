@@ -1,52 +1,70 @@
 import "../../styles/admin.css";
 import Service from "../../components/service/Service";
-import {useState} from "react";
+import {useState, useCallback} from "react";
 
 export default function Admin() {
     const [services, setServices] = useState([
         {
             "name": "Crawler",
             "description": "Explore the web to find new webpages",
-            "status": "Stopped"
         },
         {
             "name": "Parser",
             "description": "Parse found page's informations",
-            "status": "Stopped"
         },
         {
             "name": "Indexer",
             "description": "Save found pages in GogolFlex's Database",
-            "status": "Stopped"
         },
     ]);
 
-    const changeStatus = (name, status) => {
-        let error = false;
-
-        // Get API's url
+    const getStatus = useCallback((name) => {
         const host = process.env[`REACT_APP_${name.toUpperCase()}_API_HOST`]
         const port = process.env[`REACT_APP_${name.toUpperCase()}_API_PORT`]
-        const action = status === "Running" ? "start" : status === "Paused" ? "stop" : "shutdown";
-        const url = `http://${host}:${port}/${action}`;
+        const url = `http://${host}:${port}/get-status`;
 
-        // Request to API
-        fetch(url, {
+        return fetch(url, {
             method: "GET",
         })
         .then(res => res.json())
-        .then(data => {console.log(data)})
-        .catch(err => error = true);
+        .then(data => data.status ?? "Stopped")
+        .catch(err => "Stopped");
+    }, [])
 
-        // Update service
-        if (!error) {
-            setServices(
-                prev =>
-                    prev.map(service => (
-                        service.name === name ? { ...service, status: status } : service
-                    ))
-            )
-        }
+    const doAction = (name, button) => {
+        // Get status
+        return getStatus(name).then(status => {
+            console.log(status);
+
+            // Get API's url
+            if (status === "Stopped") {
+                console.log("Sorry, API is Stopped");
+                return "Stopped"
+            } else {
+                const host = process.env[`REACT_APP_${name.toUpperCase()}_API_HOST`]
+                const port = process.env[`REACT_APP_${name.toUpperCase()}_API_PORT`]
+                let action = ""
+                if (button === "Main") {
+                    if (status === "Paused") {
+                        action = "start"
+                    } else {
+                        action = "pause"
+                    }
+                } else {
+                    action = "stop"
+                }
+
+                const url = `http://${host}:${port}/${action}`;
+
+                // Request to API
+                return fetch(url, {
+                    method: "GET",
+                })
+                    .then(res => res.json())
+                    .then(data => data.status ?? "Stopped")
+                    .catch(err => "Stopped");
+            }
+        });
     }
 
     return (
@@ -64,8 +82,8 @@ export default function Admin() {
                                 key={index}
                                 name={service.name}
                                 description={service.description}
-                                status={service.status}
-                                changeStatus={changeStatus}
+                                getStatus={getStatus}
+                                doAction={doAction}
                             />
                         ))
                     }
