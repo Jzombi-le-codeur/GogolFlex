@@ -80,7 +80,7 @@ def pause():
 @app.get("/stop")
 def stop(background_task: BackgroundTasks):
     pause()
-    background_task.add_task(lambda: (time.sleep(2), os.kill(os.getpid(), signal.SIGTERM)))
+    background_task.add_task(lambda: (time.sleep(0.5), os.kill(os.getpid(), signal.SIGTERM)))
     return {"response": "API Stopped", "status": "Stopped"}
 
 

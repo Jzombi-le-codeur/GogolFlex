@@ -19,12 +19,14 @@ export default function Admin() {
     ]);
 
     const getStatus = useCallback((name) => {
-        const host = process.env[`REACT_APP_${name.toUpperCase()}_API_HOST`]
-        const port = process.env[`REACT_APP_${name.toUpperCase()}_API_PORT`]
+        const host = process.env[`REACT_APP_API_HOST`]
+        const port = process.env[`REACT_APP_API_PORT`]
         const url = `http://${host}:${port}/get-status`;
 
         return fetch(url, {
-            method: "GET",
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({"name": name}),
         })
         .then(res => res.json())
         .then(data => data.status ?? "Stopped")
@@ -36,38 +38,48 @@ export default function Admin() {
         return getStatus(name).then(status => {
 
             // Get API's url
-            if (status === "Stopped") {
-                return fetch(`http://${process.env.REACT_APP_API_HOST}:${process.env.REACT_APP_API_PORT}/run-service`, {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({"name": name}),
-                })
-                    .then(res => res.json())
-                    .then(data => data.status ?? "Stopped")
-                    .catch(err => "Stopped");
-            } else {
-                const host = process.env[`REACT_APP_${name.toUpperCase()}_API_HOST`]
-                const port = process.env[`REACT_APP_${name.toUpperCase()}_API_PORT`]
-                let action = ""
-                if (button === "Main") {
-                    if (status === "Paused") {
-                        action = "start"
-                    } else {
-                        action = "pause"
-                    }
+            if (button === "Main") {
+                if (status === "Paused") {
+                    return fetch(`http://${process.env.REACT_APP_API_HOST}:${process.env.REACT_APP_API_PORT}/start`, {
+                        method: "POST",
+                        headers: {"Content-Type": "application/json"},
+                        body: JSON.stringify({"name": name}),
+                    })
+                        .then(res => res.json())
+                        .then(data => data.status ?? "Stopped")
+                        .catch(err => "Stopped");
+                }  else if (status === "Running") {
+                    return fetch(`http://${process.env.REACT_APP_API_HOST}:${process.env.REACT_APP_API_PORT}/pause`, {
+                        method: "POST",
+                        headers: {"Content-Type": "application/json"},
+                        body: JSON.stringify({"name": name}),
+                    })
+                        .then(res => res.json())
+                        .then(data => data.status ?? "Stopped")
+                        .catch(err => "Stopped");
                 } else {
-                    action = "stop"
+                    return fetch(`http://${process.env.REACT_APP_API_HOST}:${process.env.REACT_APP_API_PORT}/run`, {
+                        method: "POST",
+                        headers: {"Content-Type": "application/json"},
+                        body: JSON.stringify({"name": name}),
+                    })
+                        .then(res => res.json())
+                        .then(data => data.status ?? "Stopped")
+                        .catch(err => "Stopped");
                 }
-
-                const url = `http://${host}:${port}/${action}`;
-
-                // Request to API
-                return fetch(url, {
-                    method: "GET",
-                })
-                    .then(res => res.json())
-                    .then(data => data.status ?? "Stopped")
-                    .catch(err => "Stopped");
+            } else if (button === "Stop") {
+                if (status !== "Stopped") {
+                    return fetch(`http://${process.env.REACT_APP_API_HOST}:${process.env.REACT_APP_API_PORT}/stop`, {
+                        method: "POST",
+                        headers: {"Content-Type": "application/json"},
+                        body: JSON.stringify({"name": name}),
+                    })
+                        .then(res => res.json())
+                        .then(data => data.status ?? "Stopped")
+                        .catch(err => "Stopped");
+                } else {
+                    return "Stopped";
+                }
             }
         });
     }

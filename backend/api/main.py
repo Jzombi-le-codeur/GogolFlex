@@ -35,7 +35,7 @@ class SearchRequest(BaseModel):
     query: str
     n_results: int
 
-class RunServiceRequest(BaseModel):
+class ServiceRequest(BaseModel):
     name: str
 
 
@@ -96,8 +96,8 @@ def search(request: SearchRequest):
     results_ = [{"title": title, "url": url} for url, title, _ in results]
     return {"results": results_}
 
-@app.post("/run-service")
-def run_service(service: RunServiceRequest):
+@app.post("/run")
+def run(service: ServiceRequest):
     service_name = service.name
 
     # Detect if api is in container
@@ -146,6 +146,137 @@ def run_service(service: RunServiceRequest):
             return {"response": f"Failed to start {service_name}'s API"}
 
         return {"response": f"Started {service_name}'s API", "status": "Running"}
+
+@app.post("/get-status")
+def get_status(service: ServiceRequest):
+    service_name = service.name
+    service_script_path = pathlib.Path(f"../core/{service_name}/main.py").absolute()
+
+    # Check if service is online
+    if sys.platform == "win32":
+        api_launched = any(
+            str(service_script_path) in " ".join(p.info["cmdline"] or [])
+            for p in psutil.process_iter(["cmdline"])
+        )
+
+    else:
+        result = subprocess.run(["pgrep", "-f", "python main.py"], capture_output=True)
+        api_launched = result.returncode == 0
+
+    if api_launched:
+        # Pause service
+        try:
+            response = requests.get(
+                f"http://{os.getenv(f"{service_name.upper()}_API_HOST")}:{os.getenv(f"{service_name.upper()}_API_PORT")}/get-status"
+            )
+            status = response.json()["status"]
+            return {"response": f"{service_name} is {status}", "status": status}
+
+        except requests.RequestException:
+            return {"response": f"Failed to pause {service_name}'s API", "status": "Running"}
+
+    else:
+        return {"response": f"{service_name}.s are not running", "status": "Stopped"}
+
+@app.post("/start")
+def start(service: ServiceRequest):
+    service_name = service.name
+    service_script_path = pathlib.Path(f"../core/{service_name}/main.py").absolute()
+    
+    # Check if service is online
+    if sys.platform == "win32":
+        api_launched = any(
+            str(service_script_path) in " ".join(p.info["cmdline"] or [])
+            for p in psutil.process_iter(["cmdline"])
+        )
+
+    else:
+        result = subprocess.run(["pgrep", "-f", "python main.py"], capture_output=True)
+        api_launched = result.returncode == 0
+        
+    if api_launched:
+        # Start service
+        try:
+            response = requests.get(
+                f"http://{os.getenv(f"{service_name.upper()}_API_HOST")}:{os.getenv(f"{service_name.upper()}_API_PORT")}/start")
+            if response.json()["status"] != "Running":
+                return {"response": f"Failed to start {service_name}'s API", "status": "Paused"}
+            
+            else:
+                return {"response": f"Started {service_name}", "status": "Running"}
+
+        except requests.RequestException:
+            return {"response": f"Failed to start {service_name}'s API", "status": "Paused"}
+    
+    else:
+        return {"response": f"{service_name}.s are not running", "status": "Stopped"}
+
+
+@app.post("/pause")
+def pause(service: ServiceRequest):
+    service_name = service.name
+    service_script_path = pathlib.Path(f"../core/{service_name}/main.py").absolute()
+
+    # Check if service is online
+    if sys.platform == "win32":
+        api_launched = any(
+            str(service_script_path) in " ".join(p.info["cmdline"] or [])
+            for p in psutil.process_iter(["cmdline"])
+        )
+
+    else:
+        result = subprocess.run(["pgrep", "-f", "python main.py"], capture_output=True)
+        api_launched = result.returncode == 0
+
+    if api_launched:
+        # Pause service
+        try:
+            response = requests.get(
+                f"http://{os.getenv(f"{service_name.upper()}_API_HOST")}:{os.getenv(f"{service_name.upper()}_API_PORT")}/pause")
+            if response.json()["status"] != "Paused":
+                return {"response": f"Failed to pause {service_name}'s API", "status": "Running"}
+
+            else:
+                return {"response": f"Paused {service_name}", "status": "Paused"}
+
+        except requests.RequestException:
+            return {"response": f"Failed to pause {service_name}'s API", "status": "Running"}
+
+    else:
+        return {"response": f"{service_name}.s are not running", "status": "Stopped"}
+
+@app.post("/stop")
+def stop(service: ServiceRequest):
+    service_name = service.name
+    service_script_path = pathlib.Path(f"../core/{service_name}/main.py").absolute()
+
+    # Check if service is online
+    if sys.platform == "win32":
+        api_launched = any(
+            str(service_script_path) in " ".join(p.info["cmdline"] or [])
+            for p in psutil.process_iter(["cmdline"])
+        )
+
+    else:
+        result = subprocess.run(["pgrep", "-f", "python main.py"], capture_output=True)
+        api_launched = result.returncode == 0
+
+    if api_launched:
+        # Pause service
+        try:
+            response = requests.get(
+                f"http://{os.getenv(f"{service_name.upper()}_API_HOST")}:{os.getenv(f"{service_name.upper()}_API_PORT")}/stop")
+            if response.json()["status"] != "Stopped":
+                return {"response": f"Error when stopping {service_name}'s API", "status": "Stopped"}
+
+            else:
+                return {"response": f"Stopped {service_name}", "status": "Stopped"}
+
+        except requests.RequestException:
+            return {"response": f"Failed to stop {service_name}'s API", "status": "Stopped"}
+
+    else:
+        return {"response": f"{service_name}.s are already stopped", "status": "Stopped"}
 
 
 if __name__ == "__main__":
