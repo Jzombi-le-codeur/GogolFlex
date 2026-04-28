@@ -1,9 +1,9 @@
 import "../../styles/admin.css";
-import Service from "../../components/service/Service";
+import Service from "../../components/service/Service.jsx";
 import {useState, useCallback} from "react";
 
 export default function Admin() {
-    const [services, setServices] = useState([
+    const [services] = useState([
         {
             "name": "Crawler",
             "description": "Explore the web to find new webpages",
@@ -19,9 +19,7 @@ export default function Admin() {
     ]);
 
     const getStatus = useCallback((name) => {
-        const host = process.env[`REACT_APP_API_HOST`]
-        const port = process.env[`REACT_APP_API_PORT`]
-        const url = `http://${host}:${port}/get-status`;
+        const url = "/api/get-status";
 
         return fetch(url, {
             method: "POST",
@@ -30,7 +28,7 @@ export default function Admin() {
         })
         .then(res => res.json())
         .then(data => data.status ?? "Stopped")
-        .catch(err => "Stopped");
+        .catch(() => "Stopped");
     }, [])
 
     const doAction = (name, button) => {
@@ -40,43 +38,43 @@ export default function Admin() {
             // Get API's url
             if (button === "Main") {
                 if (status === "Paused") {
-                    return fetch(`http://${process.env.REACT_APP_API_HOST}:${process.env.REACT_APP_API_PORT}/start`, {
+                    return fetch("/api/start", {
                         method: "POST",
                         headers: {"Content-Type": "application/json"},
                         body: JSON.stringify({"name": name}),
                     })
                         .then(res => res.json())
                         .then(data => data.status ?? "Stopped")
-                        .catch(err => "Stopped");
+                        .catch(() => "Stopped");
                 }  else if (status === "Running") {
-                    return fetch(`http://${process.env.REACT_APP_API_HOST}:${process.env.REACT_APP_API_PORT}/pause`, {
+                    return fetch("/api/pause", {
                         method: "POST",
                         headers: {"Content-Type": "application/json"},
                         body: JSON.stringify({"name": name}),
                     })
                         .then(res => res.json())
                         .then(data => data.status ?? "Stopped")
-                        .catch(err => "Stopped");
+                        .catch(() => "Stopped");
                 } else {
-                    return fetch(`http://${process.env.REACT_APP_API_HOST}:${process.env.REACT_APP_API_PORT}/run`, {
+                    return fetch("/api/run", {
                         method: "POST",
                         headers: {"Content-Type": "application/json"},
                         body: JSON.stringify({"name": name}),
                     })
                         .then(res => res.json())
                         .then(data => data.status ?? "Stopped")
-                        .catch(err => "Stopped");
+                        .catch(() => "Stopped");
                 }
             } else if (button === "Stop") {
                 if (status !== "Stopped") {
-                    return fetch(`http://${process.env.REACT_APP_API_HOST}:${process.env.REACT_APP_API_PORT}/stop`, {
+                    return fetch("/api/stop", {
                         method: "POST",
                         headers: {"Content-Type": "application/json"},
                         body: JSON.stringify({"name": name}),
                     })
                         .then(res => res.json())
                         .then(data => data.status ?? "Stopped")
-                        .catch(err => "Stopped");
+                        .catch(() => "Stopped");
                 } else {
                     return "Stopped";
                 }

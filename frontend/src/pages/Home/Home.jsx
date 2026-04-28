@@ -1,7 +1,7 @@
 import React from "react";
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import Searchbar from "../../components/searchbar/Searchbar";
+import Searchbar from "../../components/searchbar/Searchbar.jsx";
 import "../../styles/home.css";
 
 export default function Home() {

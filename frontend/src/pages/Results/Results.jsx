@@ -1,7 +1,7 @@
 import React from "react";
 import { useState, useEffect, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
-import Searchbar from "../../components/searchbar/Searchbar";
+import Searchbar from "../../components/searchbar/Searchbar.jsx";
 import "../../styles/results.css";
 
 export default function Results() {
@@ -10,8 +10,7 @@ export default function Results() {
     const [query, setQuery] = useState("");
 
     const doSearch = useCallback(query => {
-        console.log(`http://${process.env.REACT_APP_API_HOST}:${process.env.REACT_APP_API_PORT}`);
-        fetch(`http://${process.env.REACT_APP_API_HOST}:${process.env.REACT_APP_API_PORT}/search`, {
+        fetch(`/api/search`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
