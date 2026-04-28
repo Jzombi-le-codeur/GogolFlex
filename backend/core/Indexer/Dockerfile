@@ -5,7 +5,7 @@ FROM python:3.14-slim
 WORKDIR /app
 
 # Copy Application in Workdir
-CP . /app
+COPY . /app
 
 # Install requirements
 RUN pip install -r requirements.txt

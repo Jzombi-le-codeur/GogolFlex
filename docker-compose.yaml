@@ -1,0 +1,116 @@
+services:
+  frontend:
+    build: ./frontend
+    image: frontend
+    depends_on:
+      - api
+    ports:
+      - "${FRONTEND_PORT}:${FRONTEND_PORT}"
+    networks:
+      - network
+  api:
+    build: ./backend/api
+    image: api
+    depends_on:
+      - db
+    ports:
+      - "${API_PORT}:${API_PORT}"
+    environment:
+      - HOST=api
+      - PORT=${API_PORT}
+      - CRAWLER_API_HOST=crawler
+      - CRAWLER_API_PORT=${CRAWLER_API_PORT}
+      - PARSER_API_HOST=parser
+      - PARSER_API_PORT=${PARSER_API_PORT}
+      - INDEXER_API_HOST=indexer
+      - INDEXER_API_PORT=${INDEXER_API_PORT}
+      - DB_HOST=db
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - network
+
+  crawler:
+    build: ./backend/core/Crawler
+    image: crawler
+    depends_on:
+      - db
+    ports:
+      - "${CRAWLER_API_PORT}:${CRAWLER_API_PORT}"
+    environment:
+      - HOST=crawler
+      - PORT=${CRAWLER_API_PORT}
+      - DATAS_PATH=/datas
+      - DB_HOST=db
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - datas:/datas
+    networks:
+      - network
+  parser:
+    build: ./backend/core/Parser
+    image: parser
+    depends_on:
+      - db
+    ports:
+      - "${PARSER_API_PORT}:${PARSER_API_PORT}"
+    environment:
+      - HOST=parser
+      - PORT=${PARSER_API_PORT}
+      - DATAS_PATH=/datas
+      - DB_HOST=db
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - datas:/datas
+    networks:
+      - network
+  indexer:
+    build: ./backend/core/Indexer
+    image: indexer
+    depends_on:
+      - db
+    ports:
+      - "${INDEXER_API_PORT}:${INDEXER_API_PORT}"
+    environment:
+      - HOST=indexer
+      - PORT=${INDEXER_API_PORT}
+      - DATAS_PATH=/datas
+      - DB_HOST=db
+      - DB_PORT=${DB_PORT}
+      - DB_NAME=${DB_NAME}
+      - DB_USER=${DB_USER}
+      - DB_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - datas:/datas
+    networks:
+      - network
+
+  db:
+    image: postgres
+    ports:
+      - "${DB_PORT}:${DB_PORT}"
+    environment:
+      - POSTGRES_DB=${DB_NAME}
+      - POSTGRES_USER=${DB_USER}
+      - POSTGRES_PASSWORD=${DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/
+    networks:
+      - network
+
+networks:
+  network:
+
+volumes:
+  datas:
+  pgdata:

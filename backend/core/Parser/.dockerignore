@@ -1,0 +1,10 @@
+__pycache__
+.idea
+.gitignore
+.venv
+crawl.db
+Pages
+test.py
+.env
+RobotsTXT
+client.py
