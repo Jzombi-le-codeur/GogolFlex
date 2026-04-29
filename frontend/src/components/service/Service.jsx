@@ -17,13 +17,15 @@ export default function Service({ name, description, getStatus, doAction }) {
             </div>
             <div className="service-actions">
                 <button
-                    className={`service-button main-button ${status.toLowerCase()}`}
+                    className={`service-button main-button ${status.toLowerCase()} ${status === "Launching" ? "disabled" : ""}`}
                     onClick={ () => {
-                        doAction(name, "Main").then(s => setStatus(s));
+                        setStatus("Launching");
+                        doAction(name, "Main", status).then(s => setStatus(s));
                     }}
+                    disabled={status === "Launching"}
                 >
                     {
-                        status === "Stopped" || status === "Paused" ? (
+                        status === "Stopped" || status === "Launching" || status === "Paused" ? (
                             <svg width="16" height="16" viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">
                                 <polygon
                                     points="30,20 75,50 30,80"
@@ -43,11 +45,11 @@ export default function Service({ name, description, getStatus, doAction }) {
                     }
                 </button>
                 <button
-                    className={`service-button stop-button ${status.toLowerCase()} ${status === "Stopped" ? "disabled" : ""}`}
+                    className={`service-button stop-button ${status.toLowerCase()} ${status === "Stopped" || status === "Launching" ? "disabled" : ""}`}
                     onClick={ () => {
                         doAction(name, "Stop", status).then(s => setStatus(s));
                     }}
-                    disabled={status === "Stopped"}
+                    disabled={status === "Stopped" || status === "Launching"}
                 >
                     <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
                         <rect x="6" y="6" width="12" height="12" rx="2" fill="white"/>

@@ -27,7 +27,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-services_api_status = {
+launching_services_api = {
     "crawler": False,
     "parser": False,
     "indexer": False
@@ -111,12 +111,21 @@ def get_status(service: ServiceRequest):
             )
             if response.status_code < 500:
                 status = response.json()["status"]
+                if launching_services_api[service_name]:
+                    launching_services_api[service_name] = False
                 return {"response": f"{service_name} is {status}.", "status": status}
 
             else:
-                return {"response": f"{service_name} is stopped.", "status": "Stopped"}
+                if launching_services_api[service_name]:
+                    return {"response": f"{service_name} is launching.", "status": "Launching"}
+                else:
+                    return {"response": f"{service_name} is stopped.", "status": "Stopped"}
+
         except requests.RequestException:
-            return {"response": f"{service_name} is stopped.", "status": "Stopped"}
+            if launching_services_api[service_name]:
+                return {"response": f"{service_name} is launching.", "status": "Launching"}
+            else:
+                return {"response": f"{service_name} is stopped.", "status": "Stopped"}
 
     else:
         service_script_path = pathlib.Path(f"../core/{service_name}/main.py").absolute()
@@ -151,7 +160,7 @@ def run(service: ServiceRequest):
     service_name = service.name.lower()
 
     # Check if service is online
-    api_launched = get_status(service=service)["status"] != "Stopped"
+    api_launched = get_status(service=service)["status"] not in ("Stopped", "Launching")
     if api_launched:
         print("API is already running")
         return {"response": f"API is already running"}
@@ -191,21 +200,39 @@ def run(service: ServiceRequest):
 
             result = subprocess.Popen([str(venv_python), str(service_script_path)])
 
+        launching_services_api[service_name] = True
+        return {"response": f"Launching {service_name}'s API", "status": "Launching"}
 
-        # Start service
-        try:
-            response = requests.get(f"http://{os.getenv(f"{service_name.upper()}_API_HOST")}:{os.getenv(f"{service_name.upper()}_API_PORT")}/start")
-            if response.json()["status"] != "Running":
-                return {"response": f"Failed to start {service_name}'s API"}
+        setInte
 
-        except requests.RequestException:
-            return {"response": f"Failed to start {service_name}'s API"}
 
-        print("caca")
-        return {"response": f"Started {service_name}'s API", "status": "Running"}
+        # # Start service
+        # try:
+        #     response = requests.get(f"http://{os.getenv(f"{service_name.upper()}_API_HOST")}:{os.getenv(f"{service_name.upper()}_API_PORT")}/start")
+        #     if response.json()["status"] != "Running":
+        #         return {"response": f"Failed to start {service_name}'s API"}
+        #
+        # except requests.RequestException:
+        #     return {"response": f"Failed to start {service_name}'s API"}
+        #
+        # print("caca")
+        # return {"response": f"Started {service_name}'s API", "status": "Running"}
+
+def _start_service(service_name: str):
+    try:
+        response = requests.get(
+            f"http://{os.getenv(f"{service_name.upper()}_API_HOST")}:{os.getenv(f"{service_name.upper()}_API_PORT")}/start")
+        if response.json()["status"] != "Running":
+            return {"response": f"Failed to start {service_name}'s API", "status": "Paused"}
+
+        else:
+            return {"response": f"Started {service_name}", "status": "Running"}
+
+    except requests.RequestException:
+        return {"response": f"Failed to start {service_name}'s API", "status": "Paused"}
 
 @app.post("/start")
-def start(service: ServiceRequest):
+def start(service: ServiceRequest, check_status: bool = True):
     service_name = service.name.lower()
     service_script_path = pathlib.Path(f"../core/{service_name}/main.py").absolute()
 
@@ -214,17 +241,7 @@ def start(service: ServiceRequest):
 
     if api_launched:
         # Start service
-        try:
-            response = requests.get(
-                f"http://{os.getenv(f"{service_name.upper()}_API_HOST")}:{os.getenv(f"{service_name.upper()}_API_PORT")}/start")
-            if response.json()["status"] != "Running":
-                return {"response": f"Failed to start {service_name}'s API", "status": "Paused"}
-            
-            else:
-                return {"response": f"Started {service_name}", "status": "Running"}
-
-        except requests.RequestException:
-            return {"response": f"Failed to start {service_name}'s API", "status": "Paused"}
+        return _start_service(service_name=service_name)
     
     else:
         return {"response": f"{service_name}.s are not running", "status": "Stopped"}
@@ -264,7 +281,7 @@ def stop(service: ServiceRequest):
     api_launched = get_status(service=service)["status"] != "Stopped"
 
     if api_launched:
-        # Pause service
+        # Stop service
         try:
             response = requests.get(
                 f"http://{os.getenv(f"{service_name.upper()}_API_HOST")}:{os.getenv(f"{service_name.upper()}_API_PORT")}/stop")

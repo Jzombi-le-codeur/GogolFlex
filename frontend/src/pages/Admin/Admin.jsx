@@ -31,55 +31,81 @@ export default function Admin() {
         .catch(() => "Stopped");
     }, [])
 
-    const doAction = (name, button) => {
-        // Get status
-        return getStatus(name).then(status => {
-
-            // Get API's url
-            if (button === "Main") {
-                if (status === "Paused") {
-                    return fetch("/api/start", {
-                        method: "POST",
-                        headers: {"Content-Type": "application/json"},
-                        body: JSON.stringify({"name": name}),
-                    })
-                        .then(res => res.json())
-                        .then(data => data.status ?? "Stopped")
-                        .catch(() => "Stopped");
-                }  else if (status === "Running") {
-                    return fetch("/api/pause", {
-                        method: "POST",
-                        headers: {"Content-Type": "application/json"},
-                        body: JSON.stringify({"name": name}),
-                    })
-                        .then(res => res.json())
-                        .then(data => data.status ?? "Stopped")
-                        .catch(() => "Stopped");
-                } else {
-                    return fetch("/api/run", {
-                        method: "POST",
-                        headers: {"Content-Type": "application/json"},
-                        body: JSON.stringify({"name": name}),
-                    })
-                        .then(res => res.json())
-                        .then(data => data.status ?? "Stopped")
-                        .catch(() => "Stopped");
-                }
-            } else if (button === "Stop") {
-                if (status !== "Stopped") {
-                    return fetch("/api/stop", {
-                        method: "POST",
-                        headers: {"Content-Type": "application/json"},
-                        body: JSON.stringify({"name": name}),
-                    })
-                        .then(res => res.json())
-                        .then(data => data.status ?? "Stopped")
-                        .catch(() => "Stopped");
-                } else {
-                    return "Stopped";
-                }
-            }
+    const askUntilReady = useCallback((name) => {
+        return new Promise((resolve) => {
+            const interval = setInterval(() => {
+                getStatus(name).then((status) => {
+                    if (status !== "Stopped" && status !== "Launching") {
+                        clearInterval(interval);
+                        const status = fetch("/api/start", {
+                            method: "POST",
+                            headers: {"Content-Type": "application/json"},
+                            body: JSON.stringify({"name": name}),
+                        })
+                            .then(res => res.json())
+                            .then(data => data.status ?? "Stopped")
+                            .catch(() => "Stopped");
+                        resolve(status);
+                    } else if (status === "Stopped") {
+                        clearInterval(interval);
+                        resolve("Stopped");
+                    }
+                });
+            }, 1000);
         });
+    }, [getStatus]);
+
+    const doAction = (name, button, status) => {
+        // Get API's url
+        if (button === "Main") {
+            if (status === "Paused") {
+                return fetch("/api/start", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({"name": name}),
+                })
+                    .then(res => res.json())
+                    .then(data => data.status ?? "Stopped")
+                    .catch(() => "Stopped");
+            }  else if (status === "Running") {
+                return fetch("/api/pause", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({"name": name}),
+                })
+                    .then(res => res.json())
+                    .then(data => data.status ?? "Stopped")
+                    .catch(() => "Stopped");
+            } else {
+                return fetch("/api/run", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({"name": name}),
+                })
+                    .then(res => res.json())
+                    .then(data => {
+                        const status = data.status ?? "Stopped";
+                        if (status === "Launching") {
+                            return askUntilReady(name);
+                        }
+                        return status;
+                    })
+                    .catch(() => "Stopped");
+            }
+        } else if (button === "Stop") {
+            if (status !== "Stopped") {
+                return fetch("/api/stop", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({"name": name}),
+                })
+                    .then(res => res.json())
+                    .then(data => data.status ?? "Stopped")
+                    .catch(() => "Stopped");
+            } else {
+                return "Stopped";
+            }
+        }
     }
 
     return (
@@ -94,6 +120,7 @@ export default function Admin() {
                     {
                         services.map((service, index) => (
                             <Service
+                                key={index}
                                 key={index}
                                 name={service.name}
                                 description={service.description}

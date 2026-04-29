@@ -62,6 +62,15 @@
     background-color: #00d306;
 }
 
+.main-button.disabled {
+    background-color: #005106;
+}
+
+.main-button.disabled:hover {
+    cursor: default;
+    transform: scale(1.0);
+}
+
 .stop-button {
     background-color: red;
 }
