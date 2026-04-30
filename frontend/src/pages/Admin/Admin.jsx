@@ -142,7 +142,15 @@ export default function Admin({ accessToken, setAccessToken }) {
             <header className="admin">
                 <h1 className="title admin">GogolFlex</h1>
                 <p className="sub-title admin">Admin</p>
-                <DisconnectButton username="admin" setAccessToken={setAccessToken} />
+                <div className="actions-buttons">
+                    <p
+                        className="quit-button"
+                        onClick={() => navigate("/")}
+                    >
+                        Quit
+                    </p>
+                    <DisconnectButton username="admin" setAccessToken={setAccessToken} />
+                </div>
             </header>
             <main className="admin">
                 <h2>Services</h2>

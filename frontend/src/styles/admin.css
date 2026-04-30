@@ -11,8 +11,22 @@ header.admin {
     gap: 0.25rem
 }
 
-.disconnect-button {
-    margin: auto 1rem auto auto;
+.actions-buttons {
+    margin: auto 2rem auto auto;
+    display: flex;
+    flex-direction: row;
+    align-items: center;
+    gap: 1rem;
+    font-size: 1.2rem;
+}
+
+.quit-button {
+    color: #1677ff;
+}
+
+.quit-button:hover {
+    text-decoration: underline;
+    cursor: pointer;
 }
 
 .services.admin {
