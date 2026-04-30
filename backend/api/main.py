@@ -3,6 +3,8 @@ import json
 import pathlib
 import secrets
 import subprocess
+import time
+
 import argon2.exceptions
 from fastapi import FastAPI, Response, Cookie
 from fastapi.middleware.cors import CORSMiddleware
@@ -24,13 +26,19 @@ load_dotenv()
 app = FastAPI()
 if pathlib.Path("/.dockerenv").exists():
     client = docker.from_env()
-db = psycopg.connect(
-    host=os.getenv("DB_HOST"),
-    port=os.getenv("DB_PORT"),
-    dbname=os.getenv("DB_NAME"),
-    user=os.getenv("DB_USER"),
-    password=os.getenv("DB_PASSWORD"),
-)
+
+for i in range(15):
+    try:
+        db = psycopg.connect(
+            host=os.getenv("DB_HOST"),
+            port=os.getenv("DB_PORT"),
+            dbname=os.getenv("DB_NAME"),
+            user=os.getenv("DB_USER"),
+            password=os.getenv("DB_PASSWORD"),
+        )
+    except psycopg.OperationalError:
+        time.sleep(2)
+
 ph = PasswordHasher()
 secret_key = os.getenv("SECRET_KEY")
 

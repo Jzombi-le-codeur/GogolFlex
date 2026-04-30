@@ -18,6 +18,8 @@ services:
     environment:
       - HOST=api
       - PORT=${API_PORT}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - SECRET_KEY=${SECRET_KEY}
       - CRAWLER_API_HOST=crawler
       - CRAWLER_API_PORT=${CRAWLER_API_PORT}
       - PARSER_API_HOST=parser
