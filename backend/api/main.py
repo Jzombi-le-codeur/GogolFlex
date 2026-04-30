@@ -1,6 +1,10 @@
+import datetime
+import json
 import pathlib
+import secrets
 import subprocess
-from fastapi import FastAPI
+import argon2.exceptions
+from fastapi import FastAPI, Response, Cookie
 from fastapi.middleware.cors import CORSMiddleware
 import uvicorn
 from pydantic import BaseModel
@@ -12,11 +16,23 @@ import requests
 import sys
 import psutil
 import docker
+from argon2 import PasswordHasher
+import jwt
 
 
 load_dotenv()
 app = FastAPI()
-client = docker.from_env()
+if pathlib.Path("/.dockerenv").exists():
+    client = docker.from_env()
+db = psycopg.connect(
+    host=os.getenv("DB_HOST"),
+    port=os.getenv("DB_PORT"),
+    dbname=os.getenv("DB_NAME"),
+    user=os.getenv("DB_USER"),
+    password=os.getenv("DB_PASSWORD"),
+)
+ph = PasswordHasher()
+secret_key = os.getenv("SECRET_KEY")
 
 origins = ["*"]
 app.add_middleware(
@@ -37,6 +53,13 @@ class SearchRequest(BaseModel):
     query: str
     n_results: int
 
+class LoginRequest(BaseModel):
+    username: str
+    password: str
+
+class AccessTokenRequest(BaseModel):
+    access_token: str
+
 class ServiceRequest(BaseModel):
     name: str
 
@@ -44,6 +67,38 @@ class ServiceRequest(BaseModel):
 def __normalize(text):
     nfkd = unicodedata.normalize("NFKD", text)
     return "".join(c for c in nfkd if not unicodedata.combining(c))
+
+
+def init():
+    with open("save.json") as save:
+        save = json.load(save)
+
+    if save["firstUse"]:
+        db_cursor = db.cursor()
+
+        # Create tables
+        db_cursor.execute("""
+        CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            username TEXT UNIQUE,
+            password TEXT
+        )
+        """)
+        db_cursor.execute("""
+        CREATE TABLE IF NOT EXISTS refresh_tokens (
+            id SERIAL PRIMARY KEY,
+            username TEXT,
+            token TEXT,
+            expiration TIMESTAMP
+        )
+        """)
+
+        # Save admin's IDs
+        password = os.getenv("ADMIN_PASSWORD")
+        password = ph.hash(password)
+        db_cursor.execute("INSERT INTO users (username, password) VALUES (%s, %s) ON CONFLICT (username) DO NOTHING", ("admin", password,))
+        db.commit()
+
 
 @app.post("/search")
 def search(request: SearchRequest):
@@ -57,13 +112,6 @@ def search(request: SearchRequest):
     sql_query = " INTERSECT ".join(sql_query)
 
     # Get results
-    db = psycopg.connect(
-        host=os.getenv("DB_HOST"),
-        port=os.getenv("DB_PORT"),
-        dbname=os.getenv("DB_NAME"),
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD"),
-    )
     with db.cursor() as db_cursor:
         if n_results != -1:
             db_cursor.execute(f"""
@@ -97,6 +145,130 @@ def search(request: SearchRequest):
     # Send results
     results_ = [{"title": title, "url": url} for url, title, _ in results]
     return {"results": results_}
+
+def __generate_token(token_type: str, username: str):
+    # Generate token
+    if token_type == "access":
+        payload = {
+            "username": username,
+            "exp": datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(hours=1)
+        }
+
+        # Generate token
+        token = jwt.encode(
+            payload=payload,
+            key=secret_key,
+            algorithm="HS256"
+        )
+
+    else:
+        token = secrets.token_hex(64)
+
+    # Save refresh token
+    if token_type == "refresh":
+        db_cursor = db.cursor()
+        db_cursor.execute(
+            "INSERT INTO refresh_tokens (username, token, expiration) VALUES (%s, %s, %s)",
+            (username, token, datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(days=7))
+        )
+        db.commit()
+
+    return token
+
+@app.post("/login")
+def login(ids: LoginRequest, response: Response):
+    # Get IDs
+    username = ids.username
+    password = ids.password
+
+    db_cursor = db.cursor()
+
+    # Check if username exists in DB
+    db_cursor.execute("""
+    SELECT username, password FROM users WHERE username=%s
+    """, (username,))
+    real_ids = db_cursor.fetchone()
+    if not real_ids:
+        return {"response": "This user doesn't exist.", "status": "NotExists"}
+
+    # Check if password is correct
+    try:
+        ph.verify(real_ids[1], password)
+
+        # Delete all expired tokens
+        db_cursor.execute("""
+        DELETE FROM refresh_tokens
+        WHERE username=%s;
+        """, (username,))
+
+        # Generate refresh token
+        response.set_cookie(
+            key="refresh_token",
+            value=__generate_token(token_type="refresh", username=username),
+            httponly=True,
+            samesite="strict",
+            max_age=7*24*3600
+        )
+
+        return {
+            "response": "Connected !",
+            "status": "Connected",
+            "accessToken": __generate_token(token_type="access", username=username)
+        }
+
+    except argon2.exceptions.VerifyMismatchError:
+        return {"response": "Password is false", "status": "Incorrect"}
+
+def handle_refresh_token(refresh_token: str):
+    # Check if refresh token is valid
+    db_cursor = db.cursor()
+    db_cursor.execute("""
+                    SELECT username FROM refresh_tokens WHERE token = %s AND expiration > NOW()
+                    """, (refresh_token,))
+    username_response = db_cursor.fetchone()
+    print("username response :", username_response)
+    if not username_response:
+        return {"response": "This token is expired", "status": "Disconnected"}
+
+    # Generate new token
+    # Get username
+    username = username_response[0]
+
+    return {
+        "response": "Token is valid",
+        "status": "Connected",
+        "accessToken": __generate_token(token_type="access", username=username)
+    }
+
+@app.post("/check-token")
+def check_token(token_request: AccessTokenRequest, refresh_token: str = Cookie(None)):
+    access_token = token_request.access_token
+    print("Token :", access_token)
+    print("Refresh Token :", refresh_token)
+
+    # Check if token has been sent
+    print("Is access token", (not access_token is True))
+    if not access_token:
+        print("feurrouge")
+        if not refresh_token:
+            print("feur")
+            return {"response": "No token has been receipted", "status": "Disconnected"}
+
+        else:
+            print("quoicoubeh")
+            # Check if refresh token is valid
+            return handle_refresh_token(refresh_token=refresh_token)
+
+    # Check token
+    try:
+        jwt.decode(access_token, key=secret_key, algorithms=["HS256"])
+        return {"response": "Token is valid", "status": "Connected"}
+
+    except jwt.ExpiredSignatureError:
+        return handle_refresh_token(refresh_token=refresh_token)
+
+    except jwt.InvalidTokenError:
+        return {"response": "This token is invalid", "status": "Disconnected"}
 
 @app.post("/get-status")
 def get_status(service: ServiceRequest):
@@ -203,21 +375,6 @@ def run(service: ServiceRequest):
         launching_services_api[service_name] = True
         return {"response": f"Launching {service_name}'s API", "status": "Launching"}
 
-        setInte
-
-
-        # # Start service
-        # try:
-        #     response = requests.get(f"http://{os.getenv(f"{service_name.upper()}_API_HOST")}:{os.getenv(f"{service_name.upper()}_API_PORT")}/start")
-        #     if response.json()["status"] != "Running":
-        #         return {"response": f"Failed to start {service_name}'s API"}
-        #
-        # except requests.RequestException:
-        #     return {"response": f"Failed to start {service_name}'s API"}
-        #
-        # print("caca")
-        # return {"response": f"Started {service_name}'s API", "status": "Running"}
-
 def _start_service(service_name: str):
     try:
         response = requests.get(
@@ -299,4 +456,9 @@ def stop(service: ServiceRequest):
 
 
 if __name__ == "__main__":
-    uvicorn.run("main:app", host=os.getenv("HOST"), port=int(os.getenv("PORT")))
+    try:
+        init()
+        uvicorn.run("main:app", host=os.getenv("HOST"), port=int(os.getenv("PORT")))
+
+    finally:
+        db.close()

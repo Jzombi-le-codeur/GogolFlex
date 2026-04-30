@@ -1,8 +1,9 @@
 import "../../styles/admin.css";
 import Service from "../../components/service/Service.jsx";
-import {useState, useCallback} from "react";
+import {useState, useCallback, useEffect} from "react";
+import {useNavigate} from "react-router-dom";
 
-export default function Admin() {
+export default function Admin({ accessToken, setAccessToken }) {
     const [services] = useState([
         {
             "name": "Crawler",
@@ -17,6 +18,30 @@ export default function Admin() {
             "description": "Save found pages in GogolFlex's Database",
         },
     ]);
+
+    const navigate = useNavigate();
+
+    // Try to connect with tokens
+    useEffect(() => {
+        fetch("/api/check-token", {
+            method: "POST",
+            credentials: "include",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({"access_token": accessToken}),
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.status === "Disconnected") {
+                navigate("/login?redirect=/admin");
+            } else if (data.accessToken) {
+                setAccessToken(data.accessToken);
+            }
+        })
+        .catch(err => {
+            console.log(err);
+            navigate("/");
+        });
+    }, [])
 
     const getStatus = useCallback((name) => {
         const url = "/api/get-status";
