@@ -1,0 +1,9 @@
+.disconnect-button {
+    color: #1677ff;
+    font-size: 1.2rem;
+}
+
+.disconnect-button:hover {
+    text-decoration: underline;
+    cursor: pointer;
+}

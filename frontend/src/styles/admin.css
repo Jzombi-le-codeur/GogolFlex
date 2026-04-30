@@ -11,6 +11,10 @@ header.admin {
     gap: 0.25rem
 }
 
+.disconnect-button {
+    margin: auto 1rem auto auto;
+}
+
 .services.admin {
     display: flex;
     justify-content: center;

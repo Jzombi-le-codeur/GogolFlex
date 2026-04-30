@@ -60,6 +60,12 @@ class LoginRequest(BaseModel):
 class AccessTokenRequest(BaseModel):
     access_token: str
 
+class RoleRequest(BaseModel):
+    access_token: str
+
+class LogoutRequest(BaseModel):
+    username: str
+
 class ServiceRequest(BaseModel):
     name: str
 
@@ -81,7 +87,8 @@ def init():
         CREATE TABLE IF NOT EXISTS users (
             id SERIAL PRIMARY KEY,
             username TEXT UNIQUE,
-            password TEXT
+            password TEXT,
+            role TEXT
         )
         """)
         db_cursor.execute("""
@@ -96,7 +103,10 @@ def init():
         # Save admin's IDs
         password = os.getenv("ADMIN_PASSWORD")
         password = ph.hash(password)
-        db_cursor.execute("INSERT INTO users (username, password) VALUES (%s, %s) ON CONFLICT (username) DO NOTHING", ("admin", password,))
+        db_cursor.execute("""
+        INSERT INTO users (username, password, role) VALUES (%s, %s, %s)
+        ON CONFLICT (username) DO NOTHING
+        """, ("admin", password, "admin",))
         db.commit()
 
 
@@ -219,23 +229,38 @@ def login(ids: LoginRequest, response: Response):
     except argon2.exceptions.VerifyMismatchError:
         return {"response": "Password is false", "status": "Incorrect"}
 
+def get_role(username: str):
+    # Get user's role
+    db_cursor = db.cursor()
+    db_cursor.execute("""
+        SELECT role FROM users WHERE username = %s
+        """, (username,))
+    role = db_cursor.fetchone()[0]
+
+    return role
+
+
 def handle_refresh_token(refresh_token: str):
     # Check if refresh token is valid
     db_cursor = db.cursor()
+
+    # Get username
     db_cursor.execute("""
-                    SELECT username FROM refresh_tokens WHERE token = %s AND expiration > NOW()
-                    """, (refresh_token,))
+    SELECT username FROM refresh_tokens WHERE token = %s AND expiration > NOW()
+    """, (refresh_token,))
     username_response = db_cursor.fetchone()
     print("username response :", username_response)
     if not username_response:
         return {"response": "This token is expired", "status": "Disconnected"}
 
-    # Generate new token
-    # Get username
     username = username_response[0]
+
+    # Get user's role
+    role = get_role(username=username)
 
     return {
         "response": "Token is valid",
+        "role": role,
         "status": "Connected",
         "accessToken": __generate_token(token_type="access", username=username)
     }
@@ -243,32 +268,45 @@ def handle_refresh_token(refresh_token: str):
 @app.post("/check-token")
 def check_token(token_request: AccessTokenRequest, refresh_token: str = Cookie(None)):
     access_token = token_request.access_token
-    print("Token :", access_token)
-    print("Refresh Token :", refresh_token)
 
     # Check if token has been sent
-    print("Is access token", (not access_token is True))
     if not access_token:
-        print("feurrouge")
         if not refresh_token:
-            print("feur")
             return {"response": "No token has been receipted", "status": "Disconnected"}
 
         else:
-            print("quoicoubeh")
             # Check if refresh token is valid
             return handle_refresh_token(refresh_token=refresh_token)
 
     # Check token
     try:
-        jwt.decode(access_token, key=secret_key, algorithms=["HS256"])
-        return {"response": "Token is valid", "status": "Connected"}
+        payload = jwt.decode(access_token, key=secret_key, algorithms=["HS256"])
+        return {"response": "Token is valid", "status": "Connected", "role": get_role(username=payload["username"])}
 
     except jwt.ExpiredSignatureError:
         return handle_refresh_token(refresh_token=refresh_token)
 
     except jwt.InvalidTokenError:
         return {"response": "This token is invalid", "status": "Disconnected"}
+
+@app.post("/logout")
+def logout(logout_request: LogoutRequest, response: Response):
+    # Get username
+    username = logout_request.username
+
+    # Delete refresh token cookie
+    response.delete_cookie(
+        key="refresh_token"
+    )
+
+    # Delete refresh token in DB
+    db_cursor = db.cursor()
+    db_cursor.execute("""
+    DELETE FROM refresh_tokens
+    WHERE username=%s;
+    """, (username,))
+
+    return {"response": "Successfuly disconnected !", "status": "Disconnected"}
 
 @app.post("/get-status")
 def get_status(service: ServiceRequest):

@@ -1,5 +1,6 @@
 import "../../styles/admin.css";
 import Service from "../../components/service/Service.jsx";
+import DisconnectButton from "../../components/disconnectButton/DisconnectButton.jsx";
 import {useState, useCallback, useEffect} from "react";
 import {useNavigate} from "react-router-dom";
 
@@ -35,6 +36,9 @@ export default function Admin({ accessToken, setAccessToken }) {
                 navigate("/login?redirect=/admin");
             } else if (data.accessToken) {
                 setAccessToken(data.accessToken);
+                if (data.role !== "admin") {
+                    navigate("/");
+                }
             }
         })
         .catch(err => {
@@ -138,6 +142,7 @@ export default function Admin({ accessToken, setAccessToken }) {
             <header className="admin">
                 <h1 className="title admin">GogolFlex</h1>
                 <p className="sub-title admin">Admin</p>
+                <DisconnectButton username="admin" setAccessToken={setAccessToken} />
             </header>
             <main className="admin">
                 <h2>Services</h2>
