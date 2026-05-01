@@ -4,7 +4,7 @@ import pathlib
 import secrets
 import subprocess
 import time
-
+from urllib.parse import urlparse
 import argon2.exceptions
 from fastapi import FastAPI, Response, Cookie
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,6 +20,7 @@ import psutil
 import docker
 from argon2 import PasswordHasher
 import jwt
+import tldextract
 
 
 load_dotenv()
@@ -74,6 +75,9 @@ class RoleRequest(BaseModel):
 class LogoutRequest(BaseModel):
     username: str
 
+class AddPageRequest(BaseModel):
+    url: str
+
 class ServiceRequest(BaseModel):
     name: str
 
@@ -107,6 +111,74 @@ def init():
             expiration TIMESTAMP
         )
         """)
+        db_cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS queue (
+                            id SERIAL PRIMARY KEY,
+                            url TEXT,
+                            domain TEXT
+                        )
+                        """)
+        db_cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS visited_urls (
+                            id SERIAL PRIMARY KEY,
+                            url TEXT,
+                            indexation INTEGER,
+                            page_filename TEXT,
+                            parsed INTEGER
+                        )
+                        """)
+        db_cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS visited_domains (
+                            id SERIAL PRIMARY KEY,
+                            url TEXT UNIQUE,
+                            crawl_delay REAL,
+                            last_visit TIMESTAMPTZ
+                        )
+                        """)
+        db_cursor.execute("""
+                        CREATE TABLE IF NOT EXISTS page_links (
+                            id SERIAL PRIMARY KEY,
+                            source_url TEXT,
+                            target_url TEXT
+                        )
+                        """)
+
+        db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_queue_url ON queue(url)")
+        db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_visited_urls_url ON visited_urls(url)")
+        db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_visited_domains_url ON visited_domains(url)")
+        db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_links_source_url ON page_links(source_url)")
+        db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_links_target_url ON page_links(target_url)")
+
+        db_cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS page_informations (
+                        id SERIAL PRIMARY KEY,
+                        url TEXT,
+                        page_filename TEXT,
+                        title TEXT,
+                        indexed INTEGER,
+                        page_rank REAL
+                    )
+                    """)
+        db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_informations_url ON page_informations(url)")
+        db_cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS inverted_index (
+                        id SERIAL PRIMARY KEY,
+                        word TEXT,
+                        page_id INTEGER,
+                        url TEXT,
+                        title TEXT,
+                        tf REAL,
+                        tf_idf REAL
+                    )
+                    """)
+        db_cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS term_documents (
+                        word TEXT PRIMARY KEY,
+                        documents_number INTEGER
+                    )
+                    """)
+        db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_inverted_index_word ON inverted_index(word)")
+        db_cursor.execute("CREATE INDEX IF NOT EXISTS idx_page_informations_indexed ON page_informations(indexed)")
 
         # Save admin's IDs
         password = os.getenv("ADMIN_PASSWORD")
@@ -315,6 +387,39 @@ def logout(logout_request: LogoutRequest, response: Response):
     """, (username,))
 
     return {"response": "Successfuly disconnected !", "status": "Disconnected"}
+
+def _is_url(s):
+    if not s.startswith(("http://", "https://")):
+        s = "https://" + s
+    try:
+        result = urlparse(s)
+        if not result.netloc:
+            return False
+
+        ext = tldextract.extract(result.netloc)
+
+        return bool(ext.domain and ext.suffix)
+    except:
+        return False
+
+@app.post("/add-page")
+def add_page(page: AddPageRequest):
+    # Get page's url & domain
+    url = page.url
+    if not _is_url(url):
+        return {"response": "Not an URL", "status": "Nourl"}
+
+    extracted = tldextract.extract(url)
+    domain = f"{extracted.domain}.{extracted.suffix}"
+
+    # Add url & domain in queue
+    db_cursor = db.cursor()
+    db_cursor.execute("""
+    INSERT INTO queue (url, domain) VALUES (%s, %s)
+    """, (url, domain,))
+    db.commit()
+
+    return {"response": "Added page in queue", "status": "ok"}
 
 @app.post("/get-status")
 def get_status(service: ServiceRequest):

@@ -3,6 +3,7 @@ import Service from "../../components/service/Service.jsx";
 import DisconnectButton from "../../components/disconnectButton/DisconnectButton.jsx";
 import {useState, useCallback, useEffect} from "react";
 import {useNavigate} from "react-router-dom";
+import PageAdder from "../../components/pageAdder/PageAdder.jsx";
 
 export default function Admin({ accessToken, setAccessToken }) {
     const [services] = useState([
@@ -153,6 +154,10 @@ export default function Admin({ accessToken, setAccessToken }) {
                 </div>
             </header>
             <main className="admin">
+                <h2>Queue</h2>
+                <div className="page-adder-box">
+                    <PageAdder />
+                </div>
                 <h2>Services</h2>
                 <div className="services admin">
                     {

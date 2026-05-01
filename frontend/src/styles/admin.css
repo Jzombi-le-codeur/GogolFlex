@@ -29,6 +29,12 @@ header.admin {
     cursor: pointer;
 }
 
+.page-adder-box {
+    width: 100%;
+    display: flex;
+    justify-content: center;
+}
+
 .services.admin {
     display: flex;
     justify-content: center;

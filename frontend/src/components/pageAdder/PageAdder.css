@@ -1,0 +1,34 @@
+.pageAdder {
+    display: flex;
+    height: 2.5rem;
+    gap: 0.5rem;
+}
+
+.input-box {
+    display: flex;
+    flex-direction: column;
+}
+
+.error-message {
+    color: red;
+    font-size: 0.5rem;
+    margin: 0.5rem
+}
+
+.error-message.hidden {
+    display: none;
+}
+
+.pageAdder-input {
+    width: 36rem;
+    height: 100%;
+    box-sizing: border-box;
+}
+
+.pageAdder-input.error {
+    width: 36rem;
+}
+
+.pageAdder-button {
+    width: 12rem;
+}
