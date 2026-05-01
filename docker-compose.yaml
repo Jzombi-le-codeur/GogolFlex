@@ -1,3 +1,5 @@
+name: GogolFlex
+
 services:
   frontend:
     build: ./frontend
