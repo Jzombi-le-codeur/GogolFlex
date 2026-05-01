@@ -43,3 +43,21 @@ docker compose up
 ```commandline
 sudo docker compose up
 ```
+
+# Usage
+## Admin panel
+### What is it ?
+Admin panel permites to run, pause, or stop services. These services are :
+- Crawler *(Explore the web to find new webpages)*
+- Parser *(Parse found page's informations)*
+- Indexer *(Save found pages in GogolFlex's Database & score it)*
+### How to use ?
+- Go to `[gogolflex-url]/admin`.
+- Login with username `admin` and admin's password.
+- If it's the first time you go, you must add a page to queue.
+- Launch `crawler`,`parser` and `indexer`.
+
+# Uninstall
+- To remove files in the working directory, run `gogolflex-setup.exe` or `gogolflex-linux`
+- Delete `gogolflex-setup.exe` or `gogolflex-linux`
+- Remove all Docker's containers, images, and volumes.
