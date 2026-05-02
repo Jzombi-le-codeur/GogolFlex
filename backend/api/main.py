@@ -21,25 +21,18 @@ import docker
 from argon2 import PasswordHasher
 import jwt
 import tldextract
+from contextlib import asynccontextmanager
 
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    init()
+    yield
+    db.close()
 
 load_dotenv()
-app = FastAPI()
+app = FastAPI(lifespan=lifespan)
 if pathlib.Path("/.dockerenv").exists():
     client = docker.from_env()
-
-for i in range(15):
-    try:
-        db = psycopg.connect(
-            host=os.getenv("DB_HOST"),
-            port=os.getenv("DB_PORT"),
-            dbname=os.getenv("DB_NAME"),
-            user=os.getenv("DB_USER"),
-            password=os.getenv("DB_PASSWORD"),
-        )
-        break
-    except psycopg.OperationalError:
-        time.sleep(2)
 
 ph = PasswordHasher()
 secret_key = os.getenv("SECRET_KEY")
@@ -89,6 +82,20 @@ def __normalize(text):
 
 
 def init():
+    global db
+    for i in range(15):
+        try:
+            db = psycopg.connect(
+                host=os.getenv("DB_HOST"),
+                port=os.getenv("DB_PORT"),
+                dbname=os.getenv("DB_NAME"),
+                user=os.getenv("DB_USER"),
+                password=os.getenv("DB_PASSWORD"),
+            )
+            break
+        except psycopg.OperationalError:
+            time.sleep(2)
+
     with open("save.json") as save:
         save = json.load(save)
 
