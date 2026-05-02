@@ -103,7 +103,7 @@ class Parser:
 
             # Get meta title content
             if title:
-                title = title["content"]
+                title = title.get("content", "")
 
             else:
                 # Try to get h1-6 tag
