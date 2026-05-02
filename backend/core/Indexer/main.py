@@ -45,6 +45,7 @@ def get_status():
 @app.get("/start")
 async def start():
     if not app.state.indexer_running:
+        app.state.indexer = Indexer()
         app.state.indexer.running = True
         app.state.indexer_running = True
         loop = asyncio.get_event_loop()

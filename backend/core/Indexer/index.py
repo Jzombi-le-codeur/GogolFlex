@@ -252,6 +252,9 @@ class Indexer:
         if not self.pages_informations:
             self.__get_pages_informations()
 
+        if not self.pages_informations:
+            return
+
         self.page_informations = self.pages_informations.pop(0)
         self.__get_page_code()
         self.__count_words()

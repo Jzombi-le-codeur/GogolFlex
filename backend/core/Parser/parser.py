@@ -61,6 +61,8 @@ class Parser:
                         page_informations["id"] = page_infos[0]
                         page_informations["url"] = page_infos[1]
                         page_informations["page_filename"] = page_infos[3]
+                        page_informations["title"] = ""
+
                         self.pages_informations.append(page_informations)
 
                     else:

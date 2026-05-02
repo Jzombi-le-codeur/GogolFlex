@@ -45,6 +45,7 @@ def get_status():
 @app.get("/start")
 async def start():
     if not app.state.parser_running:
+        app.state.parser = Parser()
         app.state.parser.running = True
         app.state.parser_running = True
         loop = asyncio.get_event_loop()

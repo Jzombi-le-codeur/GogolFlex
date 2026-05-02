@@ -37,6 +37,7 @@ for i in range(15):
             user=os.getenv("DB_USER"),
             password=os.getenv("DB_PASSWORD"),
         )
+        break
     except psycopg.OperationalError:
         time.sleep(2)
 
@@ -188,6 +189,9 @@ def init():
         ON CONFLICT (username) DO NOTHING
         """, ("admin", password, "admin",))
         db.commit()
+
+        with open("save.json", "w") as file:
+            json.dump({"firstUse": False}, file)
 
 
 @app.post("/search")
@@ -389,8 +393,6 @@ def logout(logout_request: LogoutRequest, response: Response):
     return {"response": "Successfuly disconnected !", "status": "Disconnected"}
 
 def _is_url(s):
-    if not s.startswith(("http://", "https://")):
-        s = "https://" + s
     try:
         result = urlparse(s)
         if not result.netloc:
@@ -408,6 +410,9 @@ def add_page(page: AddPageRequest):
     url = page.url
     if not _is_url(url):
         return {"response": "Not an URL", "status": "Nourl"}
+
+    if not url.startswith(("http://", "https://")):
+        url = "https://" + url
 
     extracted = tldextract.extract(url)
     domain = f"{extracted.domain}.{extracted.suffix}"

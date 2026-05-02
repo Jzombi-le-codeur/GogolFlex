@@ -61,6 +61,7 @@ def set_queue(payload: Queue):
 async def start():
     print("test")
     if not app.state.crawler_running:
+        app.state.crawler = Crawler()
         app.state.crawler.running = True
         app.state.crawler_running = True
         asyncio.create_task(app.state.crawler.run(n_crawlers=5))
