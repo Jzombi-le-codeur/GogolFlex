@@ -214,34 +214,24 @@ def search(request: SearchRequest):
 
     # Get results
     with db.cursor() as db_cursor:
-        if n_results != -1:
-            db_cursor.execute("""
-                SELECT inverted_index.url, inverted_index.title, 
-                       SUM(0.7*LOG(tf_idf + 1)) + 0.3*LOG(MAX(page_rank) + 1) AS score
-                FROM inverted_index JOIN page_informations USING (url)
-                WHERE word IN %s
-                AND page_id IN (
-                    SELECT page_id FROM inverted_index WHERE word = %s
-                    """ + " INTERSECT SELECT page_id FROM inverted_index WHERE word = %s" * (len(query) - 1) + """
-                )
-                GROUP BY inverted_index.page_id, inverted_index.title, inverted_index.url
-                ORDER BY score DESC
-                LIMIT %s
-            """, (tuple(query), *query, n_results))
+        intersect_clause = " INTERSECT SELECT page_id FROM inverted_index WHERE word = %s" * (len(query) - 1)
+        base_query = """
+            SELECT inverted_index.url, inverted_index.title, 
+                   SUM(0.7*LOG(tf_idf + 1)) + 0.3*LOG(MAX(page_rank) + 1) AS score
+            FROM inverted_index JOIN page_informations USING (url)
+            WHERE word = ANY(%s)
+            AND page_id IN (
+                SELECT page_id FROM inverted_index WHERE word = %s
+            """ + intersect_clause + """
+            )
+            GROUP BY inverted_index.page_id, inverted_index.title, inverted_index.url
+            ORDER BY score DESC
+        """
 
+        if n_results != -1:
+            db_cursor.execute(base_query + "LIMIT %s", (list(query), *query, n_results))
         else:
-            db_cursor.execute("""
-                SELECT inverted_index.url, inverted_index.title, 
-                       SUM(0.7*LOG(tf_idf + 1)) + 0.3*LOG(MAX(page_rank) + 1) AS score
-                FROM inverted_index JOIN page_informations USING (url)
-                WHERE word IN %s
-                AND page_id IN (
-                    SELECT page_id FROM inverted_index WHERE word = %s
-                    """ + " INTERSECT SELECT page_id FROM inverted_index WHERE word = %s" * (len(query) - 1) + """
-                )
-                GROUP BY inverted_index.page_id, inverted_index.title, inverted_index.url
-                ORDER BY score DESC
-            """, (tuple(query), *query))
+            db_cursor.execute(base_query, (list(query), *query))
 
         results = db_cursor.fetchall()
 
